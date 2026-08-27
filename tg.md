@@ -24,11 +24,16 @@ Mini App отправляет window.Telegram.WebApp.initData на POST /api/v1/
 Telegram Mini App требует HTTPS. Плюс от него зависит настройка cookie: в веб-клиенте Telegram Mini App живёт в кросс-сайтовом iframe, куда браузер не отдаёт SameSite=Lax. Нужен SameSite=None; Secure, а Secure без HTTPS не работает. Пока домена нет — авторизацию в веб-клиенте Telegram не проверить.
 
 Что мы предоставим
-POST /api/v1/auth/telegram — новый, делаем мы
+POST /api/v1/auth/telegram — реализовано
 Copy
 Запрос:  { "init_data": "<строка window.Telegram.WebApp.initData целиком>" }
 Ответ:   200 + Set-Cookie: presenton_session=...
-         401 если подпись невалидна или initData просрочена
+         Тело: { "configured": true, "authenticated": true,
+                 "created": true|false,          # true — аккаунт только что создан, можно поприветствовать
+                 "id", "username": "tg_<telegram_id>", "role": "user", "created_at" }
+         401 если подпись невалидна или initData просрочена (старше 15 минут)
+         429 при превышении лимита запросов (10 в минуту с IP, как у /login)
+         503 если на сервере не задан TELEGRAM_BOT_TOKEN — это ошибка конфигурации, пиши нам
 Передавай initData как есть, не разбирай и не пересобирай — подпись считается по исходной строке, любая пересборка её ломает.
 
 Кука httpOnly, поэтому из JS не читается — это нормально. Все дальнейшие запросы делай с credentials: "include".

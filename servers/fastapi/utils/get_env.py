@@ -45,6 +45,10 @@ def get_disable_auth_env():
     return os.getenv("DISABLE_AUTH")
 
 
+def get_telegram_bot_token_env():
+    return os.getenv("TELEGRAM_BOT_TOKEN")
+
+
 def get_presenton_oauth_issuer() -> str:
     return DEFAULT_PRESENTON_OAUTH_ISSUER
 

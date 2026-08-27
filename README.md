@@ -518,6 +518,7 @@ Usernames must contain at least 3 characters, and new passwords must contain at 
 | **AUTH_PASSWORD** | Password used for first-time setup, rotation, or recovery. Required when using either flag below. |
 | **AUTH_OVERRIDE_FROM_ENV**=[true/false] | Replace the primary administrator's credentials from the environment on the next startup. Use this for a deployment-managed credential rotation. |
 | **RESET_AUTH**=[true/false] | Recover access to the existing primary administrator without replacing the account or its data. |
+| **TELEGRAM_BOT_TOKEN** | Token of the Telegram bot powering the Mini App. Enables `POST /api/v1/auth/telegram` (Telegram sign-in); when unset the endpoint answers 503. |
 
 ##### Presenton Cloud provider
 

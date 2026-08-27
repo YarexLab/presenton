@@ -44,6 +44,12 @@ class LoginCredentialsRequest(BaseModel):
     password: str = Field(min_length=6, max_length=128)
 
 
+class TelegramAuthRequest(BaseModel):
+    # initData передаём сырой строкой как есть: подпись считается по исходному
+    # тексту, любая пересборка на стороне клиента её ломает.
+    init_data: str = Field(min_length=1, max_length=8192)
+
+
 class AdminCreateUserRequest(AuthCredentialsRequest):
     pass
 

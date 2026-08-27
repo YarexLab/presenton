@@ -1,4 +1,5 @@
 import ipaddress
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
@@ -15,7 +16,12 @@ from api.v1.auth.config import (
 from api.v1.auth.presenton_oauth import PRESENTON_OAUTH_ROUTER
 from api.v1.auth.principal import resolve_request_principal
 from api.v1.auth.rate_limit import LOGIN_RATE_LIMITER, login_rate_limit_key
-from api.v1.auth.schemas import AuthCredentialsRequest, LoginCredentialsRequest
+from api.v1.auth.schemas import (
+    AuthCredentialsRequest,
+    LoginCredentialsRequest,
+    TelegramAuthRequest,
+)
+from api.v1.auth.telegram import InitDataError, parse_and_verify_init_data
 from api.v1.auth.token import TOKEN_ROUTER
 from api.v1.auth.users import (
     PASSWORD_HELPER,
@@ -25,7 +31,7 @@ from api.v1.auth.users import (
 )
 from models.sql.user import User
 from services.database import get_async_session
-from utils.get_env import is_disable_auth_enabled
+from utils.get_env import get_telegram_bot_token_env, is_disable_auth_enabled
 
 API_V1_AUTH_ROUTER = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 API_V1_AUTH_ROUTER.include_router(TOKEN_ROUTER)
@@ -216,6 +222,64 @@ async def login(
         {
             "configured": True,
             "authenticated": True,
+            **serialize_user(user),
+        }
+    )
+    _set_login_cookie(response, token, request)
+    return response
+
+
+@API_V1_AUTH_ROUTER.post("/telegram")
+async def login_via_telegram(
+    body: TelegramAuthRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+):
+    bot_token = get_telegram_bot_token_env()
+    if not bot_token:
+        # Токен не задан — это ошибка конфигурации развёртывания, а не сбой
+        # кода, поэтому 503, чтобы её можно было отличить от 500.
+        raise HTTPException(status_code=503, detail="Telegram authentication is not configured")
+    try:
+        data = parse_and_verify_init_data(body.init_data, bot_token)
+    except InitDataError:
+        raise HTTPException(status_code=401, detail="Unauthorized") from None
+
+    # Имя только из цифрового id: @username в Telegram меняется, id — нет.
+    username = f"tg_{data['user']['id']}"
+    user = await session.scalar(select(User).where(User.username == username))
+    created = False
+    if user is None:
+        user = User(
+            username=username,
+            # Пароль случайный и нигде не сохраняется: войти по логину/паролю
+            # в этот аккаунт нельзя, только через Telegram.
+            hashed_password=PASSWORD_HELPER.hash(secrets.token_urlsafe(32)),
+            is_active=True,
+            is_verified=True,
+            is_superuser=False,
+            auth_version=1,
+        )
+        session.add(user)
+        try:
+            await session.flush()
+        except IntegrityError:
+            # Гонка первого входа: параллельный запрос уже создал аккаунт.
+            await session.rollback()
+            user = await session.scalar(select(User).where(User.username == username))
+        else:
+            created = True
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    await session.commit()
+    await session.refresh(user)
+
+    token = await get_jwt_strategy().write_token(user)
+    response = JSONResponse(
+        {
+            "configured": True,
+            "authenticated": True,
+            "created": created,
             **serialize_user(user),
         }
     )
