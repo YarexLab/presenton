@@ -26,6 +26,7 @@ skills-lock.json
 .DS_Store
 .codex
 eng.traineddata
+/graphify-out
 
 servers/fastapi/.coverage
 servers/nextjs/.playwright-cli/
