@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.v1.admin.router import API_V1_ADMIN_ROUTER
 from api.v1.auth.config import SESSION_COOKIE_NAME
-from api.v1.auth.router import API_V1_AUTH_ROUTER
 from api.v1.auth.rate_limit import LOGIN_RATE_LIMITER, login_rate_limit_key
+from api.v1.auth.router import API_V1_AUTH_ROUTER
 from api.v1.auth.users import PASSWORD_HELPER
 from models.sql.access_token import AccessToken
 from models.sql.presenton_cloud_provider import PresentonCloudProvider
@@ -43,9 +43,7 @@ def _build_client(tmp_path) -> tuple[TestClient, object]:
     return TestClient(app), engine
 
 
-def test_login_sets_http_only_jwt_cookie_for_username_only_account(
-    monkeypatch, tmp_path
-):
+def test_login_sets_http_only_jwt_cookie_for_username_only_account(monkeypatch, tmp_path):
     monkeypatch.setenv("USER_CONFIG_PATH", str(tmp_path / "userConfig.json"))
     monkeypatch.delenv("DISABLE_AUTH", raising=False)
 
@@ -194,9 +192,7 @@ def test_database_rejects_a_second_primary_administrator(monkeypatch, tmp_path):
     asyncio.run(engine.dispose())
 
 
-def test_admin_provider_settings_include_safe_global_presenton_status(
-    monkeypatch, tmp_path
-):
+def test_admin_provider_settings_include_safe_global_presenton_status(monkeypatch, tmp_path):
     monkeypatch.setenv("USER_CONFIG_PATH", str(tmp_path / "userConfig.json"))
     monkeypatch.setenv("CAN_CHANGE_KEYS", "true")
     client, engine = _build_client(tmp_path)

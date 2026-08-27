@@ -1,7 +1,7 @@
-import sys
 import argparse
 import asyncio
 import json
+import sys
 import traceback
 from pathlib import Path
 
@@ -11,10 +11,10 @@ from fastmcp.server.auth import AccessToken, TokenVerifier
 from fastmcp.server.dependencies import get_access_token, get_http_headers
 from fastmcp.server.providers.openapi import MCPType, RouteMap
 
-from utils.get_env import is_disable_auth_enabled, is_presenton_electron_desktop
 from models.sql.access_token import AccessToken as DatabaseAccessToken
 from models.sql.user import User
 from services.database import async_session_maker
+from utils.get_env import is_disable_auth_enabled, is_presenton_electron_desktop
 
 OPENAPI_SPEC_PATH = Path(__file__).with_name("openai_spec.json")
 MCP_API_BASE_URL = "http://127.0.0.1:8000"
@@ -45,9 +45,7 @@ MCP_ROUTE_MAPS = [
 ]
 
 MCP_TOOL_NAMES = {
-    "generate_presentation_sync_api_v1_ppt_presentation_generate_post": (
-        "generate_presentation"
-    ),
+    "generate_presentation_sync_api_v1_ppt_presentation_generate_post": ("generate_presentation"),
     "generate_presentation_async_api_v1_ppt_presentation_generate_async_post": (
         "generate_presentation_async"
     ),
@@ -160,12 +158,8 @@ async def main():
             return
 
         print("DEBUG: MCP (OpenAPI) Server startup initiated")
-        parser = argparse.ArgumentParser(
-            description="Run the MCP server (from OpenAPI)"
-        )
-        parser.add_argument(
-            "--port", type=int, default=8001, help="Port for the MCP HTTP server"
-        )
+        parser = argparse.ArgumentParser(description="Run the MCP server (from OpenAPI)")
+        parser.add_argument("--port", type=int, default=8001, help="Port for the MCP HTTP server")
 
         parser.add_argument(
             "--name",

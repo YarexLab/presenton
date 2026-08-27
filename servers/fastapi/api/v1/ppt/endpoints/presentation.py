@@ -1,12 +1,14 @@
 import asyncio
 import copy
-from datetime import datetime
 import json
 import logging
 import random
 import re
 import traceback
-from typing import Annotated, Any, List, Literal, Optional, Tuple
+import uuid
+from datetime import datetime
+from typing import Annotated, Any, Literal
+
 import dirtyjson
 from fastapi import (
     APIRouter,
@@ -23,62 +25,80 @@ from pydantic import BaseModel
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
+
+from api.v1.auth.config import SESSION_COOKIE_NAME
+from api.v1.auth.context import get_current_owner_id
 from constants.presentation import MAX_NUMBER_OF_SLIDES
 from enums.async_task_status import AsyncTaskStatus
+from enums.tone import Tone
+from enums.verbosity import Verbosity
 from enums.webhook_event import WebhookEvent
 from models.api_error_model import APIErrorModel
 from models.generate_presentation_request import GeneratePresentationRequest
 from models.presentation_and_path import PresentationPathAndEditPath
 from models.presentation_from_template import EditPresentationRequest
+from models.presentation_layout import PresentationLayoutModel, SlideLayoutModel
 from models.presentation_outline_model import (
     PresentationOutlineModel,
     SlideOutlineModel,
 )
-from enums.tone import Tone
-from enums.verbosity import Verbosity
 from models.presentation_structure_model import PresentationStructureModel
 from models.presentation_with_slides import (
     PresentationWithSlides,
 )
-from services.documents_loader import DocumentsLoader
-from services.chat.slide_ui_helpers import _normalize_generated_image_fit
-from services.temp_file_service import TEMP_FILE_SERVICE
-from services.webhook_service import WebhookService
-from services.image_generation_service import ImageGenerationService
-from services.mem0_presentation_memory_service import (
-    MEM0_PRESENTATION_MEMORY_SERVICE,
-)
-from utils.dict_utils import deep_update
-from utils.export_utils import export_presentation
-from utils.llm_calls.generate_presentation_outlines import (
-    generate_ppt_outline,
-    get_messages as get_outline_messages,
-)
+from models.sql.async_task import AsyncTaskModel
+from models.sql.presentation import PresentationModel, PresentationVersion
 from models.sql.slide import SlideModel
+from models.sql.template_v2 import TemplateV2
 from models.sse_response import (
     SSECompleteResponse,
     SSEErrorResponse,
     SSEResponse,
     SSEStatusResponse,
 )
-
-from services.database import get_async_session
-from services.database import async_session_maker
+from services.chat.slide_ui_helpers import _normalize_generated_image_fit
+from services.community_presentations import (
+    build_community_design_context,
+    load_community_references,
+    merge_reference_fonts,
+    normalize_community_ids,
+)
 from services.concurrent_service import CONCURRENT_SERVICE
-from models.sql.presentation import PresentationModel, PresentationVersion
-from models.sql.template_v2 import TemplateV2
-from models.sql.async_task import AsyncTaskModel
+from services.database import async_session_maker, get_async_session
+from services.documents_loader import DocumentsLoader
+from services.image_generation_service import ImageGenerationService
+from services.mem0_presentation_memory_service import (
+    MEM0_PRESENTATION_MEMORY_SERVICE,
+)
+from services.temp_file_service import TEMP_FILE_SERVICE
+from services.webhook_service import WebhookService
+from templates.default_templates import resolve_default_template_id
+from templates.v2.content import hydrate_repeated_top_level_groups
+from templates.v2.schema import get_template_schema
+from templates.v2.theme import template_theme_for_presentation
 from utils.asset_directory_utils import get_images_directory
+from utils.dict_utils import deep_update
+from utils.export_utils import export_presentation
+from utils.icon_weights import DEFAULT_ICON_TYPE, extract_icon_type_from_settings
+from utils.latex_text import parse_latex_tags, replace_text_runs
+from utils.llm_calls.generate_presentation_outlines import (
+    generate_ppt_outline,
+)
+from utils.llm_calls.generate_presentation_outlines import (
+    get_messages as get_outline_messages,
+)
 from utils.llm_calls.generate_presentation_structure import (
     generate_presentation_structure,
 )
 from utils.llm_calls.generate_slide_content import (
     get_slide_content_from_type_and_outline,
 )
-from utils.latex_text import parse_latex_tags, replace_text_runs
-from utils.ppt_utils import (
-    select_toc_or_list_slide_layout_index,
+from utils.llm_calls.generate_smart_presentation import (
+    generate_smart_presentation,
+    resolve_smart_slide_count,
 )
+from utils.llm_utils import TextGenerationMetrics, message_content_to_text
+from utils.outline_limits import normalize_outline_payload
 from utils.outline_utils import (
     get_images_for_slides_from_outline,
     get_no_of_outlines_to_generate_for_n_slides,
@@ -86,34 +106,20 @@ from utils.outline_utils import (
     get_presentation_outline_model_with_toc,
     get_presentation_title_from_presentation_outline,
 )
-from utils.outline_limits import normalize_outline_payload
+from utils.ppt_utils import (
+    select_toc_or_list_slide_layout_index,
+)
 from utils.process_slides import (
     process_slide_add_placeholder_assets,
     process_slide_and_fetch_assets,
 )
-from utils.icon_weights import DEFAULT_ICON_TYPE, extract_icon_type_from_settings
-from utils.llm_utils import TextGenerationMetrics, message_content_to_text
 from utils.sse import safe_sse_stream
-from api.v1.auth.config import SESSION_COOKIE_NAME
-from utils.web_search import get_selected_web_search_provider, get_web_search_route
-from utils.web_search import build_web_search_query, get_web_search_context
-from api.v1.auth.context import get_current_owner_id
-from models.presentation_layout import PresentationLayoutModel, SlideLayoutModel
-from templates.v2.schema import get_template_schema
-from templates.v2.content import hydrate_repeated_top_level_groups
-from templates.v2.theme import template_theme_for_presentation
-from templates.default_templates import resolve_default_template_id
-from services.community_presentations import (
-    build_community_design_context,
-    load_community_references,
-    merge_reference_fonts,
-    normalize_community_ids,
+from utils.web_search import (
+    build_web_search_query,
+    get_selected_web_search_provider,
+    get_web_search_context,
+    get_web_search_route,
 )
-from utils.llm_calls.generate_smart_presentation import (
-    generate_smart_presentation,
-    resolve_smart_slide_count,
-)
-import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +163,7 @@ def _blank_presentation_slide_ui() -> dict[str, Any]:
 def _presentation_task_progress_data(
     created_slides: int,
     remaining_slides: int,
-    presentation_id: Optional[uuid.UUID | str] = None,
+    presentation_id: uuid.UUID | str | None = None,
 ) -> dict[str, Any]:
     data: dict[str, Any] = {
         "created_slides": max(created_slides, 0),
@@ -182,7 +188,7 @@ def _template_reference(template_id: str) -> str:
     return template_id
 
 
-def _extract_template_id(value: Optional[str]) -> Optional[str]:
+def _extract_template_id(value: str | None) -> str | None:
     if not isinstance(value, str):
         return None
 
@@ -197,7 +203,7 @@ def _extract_template_id(value: Optional[str]) -> Optional[str]:
 async def _resolve_requested_template(
     template_name: str,
     sql_session: AsyncSession,
-) -> Optional[TemplateV2]:
+) -> TemplateV2 | None:
     template_id = _extract_template_id(template_name)
     if not template_id:
         return None
@@ -250,8 +256,8 @@ async def _resolve_generation_layout(
 ) -> tuple[
     dict[str, Any],
     PresentationLayoutModel,
-    Optional[dict[str, str]],
-    Optional[dict[str, Any]],
+    dict[str, str] | None,
+    dict[str, Any] | None,
 ]:
     template = await _resolve_requested_template(template_name, sql_session)
     if template is None:
@@ -271,8 +277,7 @@ async def _resolve_generation_layout(
                 ),
             )
         logger.info(
-            "[presentation.generate] resolved bundled template alias "
-            "name=%r template_id=%s",
+            "[presentation.generate] resolved bundled template alias name=%r template_id=%s",
             template_name,
             bundled_template_id,
         )
@@ -304,22 +309,19 @@ def _hydrate_template_slide_ui(
     slide.ui = _apply_template_content_to_ui(ui, slide.content)
 
 
-def _coerce_presentation_font_map(value: Any) -> Optional[dict[str, str]]:
+def _coerce_presentation_font_map(value: Any) -> dict[str, str] | None:
     if not isinstance(value, dict):
         return None
 
     fonts = {
         name.strip(): url.strip()
         for name, url in value.items()
-        if isinstance(name, str)
-        and isinstance(url, str)
-        and name.strip()
-        and url.strip()
+        if isinstance(name, str) and isinstance(url, str) and name.strip() and url.strip()
     }
     return fonts or None
 
 
-def _extract_template_fonts_from_assets(assets: Any) -> Optional[dict[str, str]]:
+def _extract_template_fonts_from_assets(assets: Any) -> dict[str, str] | None:
     if not isinstance(assets, dict):
         return None
     return _coerce_presentation_font_map(assets.get("fonts"))
@@ -327,9 +329,7 @@ def _extract_template_fonts_from_assets(assets: Any) -> Optional[dict[str, str]]
 
 def _presentation_response_data(presentation: PresentationModel) -> dict:
     data = presentation.model_dump(exclude={"layout", "structure"})
-    data["type"] = (
-        "smart" if presentation.generation_mode == "smart" else "standard"
-    )
+    data["type"] = "smart" if presentation.generation_mode == "smart" else "standard"
     return data
 
 
@@ -374,9 +374,7 @@ def _normalize_presentation_structure(
         normalized.append(random.randrange(layout_count))
 
     structure.slides = [
-        layout_index
-        if 0 <= layout_index < layout_count
-        else random.randrange(layout_count)
+        layout_index if 0 <= layout_index < layout_count else random.randrange(layout_count)
         for layout_index in normalized
     ]
     return structure
@@ -410,9 +408,7 @@ def _build_template_layout_model(
             else {}
         )
         layout_id = (
-            schema_layout.get("layout_id")
-            or source_layout.get("id")
-            or f"layout_{index + 1}"
+            schema_layout.get("layout_id") or source_layout.get("id") or f"layout_{index + 1}"
         )
         layout_schema = schema_layout.get("schema")
         if not isinstance(layout_schema, dict):
@@ -425,8 +421,7 @@ def _build_template_layout_model(
             SlideLayoutModel(
                 id=str(layout_id),
                 name=source_layout.get("name") or layout_schema.get("title"),
-                description=source_layout.get("description")
-                or layout_schema.get("description"),
+                description=source_layout.get("description") or layout_schema.get("description"),
                 json_schema=layout_schema,
             )
         )
@@ -456,16 +451,13 @@ def _build_template_structure_layout(
 
 
 def _is_template_layout_payload(layout_payload: Any) -> bool:
-    return (
-        isinstance(layout_payload, dict)
-        and isinstance(layout_payload.get("layouts"), list)
-    )
+    return isinstance(layout_payload, dict) and isinstance(layout_payload.get("layouts"), list)
 
 
 def _template_slide_ui(
     layout_payload: Any,
     layout_id: str,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     if not _is_template_layout_payload(layout_payload):
         return None
 
@@ -547,9 +539,9 @@ def _template_component_content_keys(components: list[Any]) -> list[str]:
 
 
 def _apply_template_content_to_ui(
-    ui: Optional[dict[str, Any]],
+    ui: dict[str, Any] | None,
     content: dict[str, Any],
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     if not isinstance(ui, dict):
         return ui
 
@@ -649,11 +641,7 @@ def _apply_template_content_to_element(
 
     nested_content = value if isinstance(value, dict) else content_values
     nested_direct_value = direct_value and not has_value
-    nested_name_occurrences = (
-        {}
-        if has_value and isinstance(value, dict)
-        else name_occurrences
-    )
+    nested_name_occurrences = {} if has_value and isinstance(value, dict) else name_occurrences
 
     if element_type == "container":
         updated = copy.deepcopy(element)
@@ -814,7 +802,7 @@ def _apply_template_math_content(
     return updated
 
 
-def _read_template_text(value: Any) -> Optional[str]:
+def _read_template_text(value: Any) -> str | None:
     if isinstance(value, str):
         return value
     if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -873,7 +861,7 @@ def _apply_template_image_content(
     return updated
 
 
-def _template_asset_prompt(value: Any, is_icon: bool) -> Optional[str]:
+def _template_asset_prompt(value: Any, is_icon: bool) -> str | None:
     if not isinstance(value, dict):
         return None
 
@@ -939,21 +927,22 @@ def _apply_template_table_content(
     template_columns = element.get("columns")
     if not isinstance(template_columns, list):
         template_columns = []
-    template_rows = [
-        row
-        for row in element.get("rows", [])
-        if isinstance(row, list)
-    ]
+    template_rows = [row for row in element.get("rows", []) if isinstance(row, list)]
 
-    generated_columns = [
-        _read_template_table_text(item)
-        for item in value.get("columns", [])
-    ] if isinstance(value.get("columns"), list) else []
-    generated_rows = [
-        [_read_template_table_text(cell) for cell in row]
-        for row in value.get("rows", [])
-        if isinstance(row, list)
-    ] if isinstance(value.get("rows"), list) else []
+    generated_columns = (
+        [_read_template_table_text(item) for item in value.get("columns", [])]
+        if isinstance(value.get("columns"), list)
+        else []
+    )
+    generated_rows = (
+        [
+            [_read_template_table_text(cell) for cell in row]
+            for row in value.get("rows", [])
+            if isinstance(row, list)
+        ]
+        if isinstance(value.get("rows"), list)
+        else []
+    )
     fallback_row = template_rows[-1] if template_rows else template_columns
 
     updated = copy.deepcopy(element)
@@ -983,7 +972,7 @@ def _apply_template_table_content(
 
 def _merge_template_table_row_to_length(
     template_cells: list[Any],
-    generated_texts: list[Optional[str]],
+    generated_texts: list[str | None],
     *,
     is_header: bool,
 ) -> list[Any]:
@@ -1160,7 +1149,7 @@ def _template_read_markdown_delimiter(
     text: str,
     index: int,
     delimiters: tuple[str, ...],
-) -> Optional[str]:
+) -> str | None:
     for delimiter in delimiters:
         if text.startswith(delimiter, index):
             return delimiter
@@ -1170,10 +1159,7 @@ def _template_read_markdown_delimiter(
 def _template_next_markdown_delimiter_index(text: str, start: int) -> int:
     indexes = [
         index
-        for index in (
-            text.find(delimiter, start)
-            for delimiter in TEMPLATE_MARKDOWN_DELIMITERS
-        )
+        for index in (text.find(delimiter, start) for delimiter in TEMPLATE_MARKDOWN_DELIMITERS)
         if index != -1
     ]
     return min(indexes) if indexes else -1
@@ -1198,7 +1184,7 @@ def _append_template_text_run(
     text_runs.append(run)
 
 
-def _read_template_table_text(value: Any) -> Optional[str]:
+def _read_template_table_text(value: Any) -> str | None:
     primitive_text = _read_template_primitive_table_text(value)
     if primitive_text is not None:
         return primitive_text[:80]
@@ -1224,7 +1210,7 @@ def _read_template_table_text(value: Any) -> Optional[str]:
     return None
 
 
-def _read_template_primitive_table_text(value: Any) -> Optional[str]:
+def _read_template_primitive_table_text(value: Any) -> str | None:
     if isinstance(value, str):
         return value
     if isinstance(value, bool):
@@ -1234,7 +1220,7 @@ def _read_template_primitive_table_text(value: Any) -> Optional[str]:
     return None
 
 
-def _read_template_data_labels(value: Any) -> Optional[str]:
+def _read_template_data_labels(value: Any) -> str | None:
     if value is True:
         return "top"
     if value is False or value is None:
@@ -1330,7 +1316,7 @@ def _get_presentation_stream_layout(
 async def _resolve_prepare_layout(
     layout: str,
     sql_session: AsyncSession,
-) -> tuple[dict[str, Any], PresentationLayoutModel, Optional[dict[str, str]]]:
+) -> tuple[dict[str, Any], PresentationLayoutModel, dict[str, str] | None]:
     template_id = _extract_template_id(layout)
     if not template_id:
         raise HTTPException(
@@ -1352,14 +1338,12 @@ async def _resolve_prepare_layout(
     )
 
 
-def _build_export_cookie_header(request: Request) -> Optional[str]:
+def _build_export_cookie_header(request: Request) -> str | None:
     cookie_header = (request.headers.get("cookie") or "").strip()
     if cookie_header:
         return cookie_header
 
-    internal_session_token = getattr(
-        request.state, "internal_session_token", None
-    )
+    internal_session_token = getattr(request.state, "internal_session_token", None)
     if isinstance(internal_session_token, str) and internal_session_token:
         return f"{SESSION_COOKIE_NAME}={internal_session_token}"
 
@@ -1370,10 +1354,10 @@ def _build_export_cookie_header(request: Request) -> Optional[str]:
     return None
 
 
-@PRESENTATION_ROUTER.get("/all", response_model=List[PresentationWithSlides])
+@PRESENTATION_ROUTER.get("/all", response_model=list[PresentationWithSlides])
 async def get_all_presentations(
     version: Annotated[
-        Optional[PresentationVersion],
+        PresentationVersion | None,
         Query(description="Only include presentations matching this version."),
     ] = None,
     include_slides: Annotated[
@@ -1432,9 +1416,7 @@ async def get_presentation(
     if not presentation:
         raise HTTPException(404, "Presentation not found")
     slides_result = await sql_session.scalars(
-        select(SlideModel)
-        .where(SlideModel.presentation == id)
-        .order_by(SlideModel.index)
+        select(SlideModel).where(SlideModel.presentation == id).order_by(SlideModel.index)
     )
     slides = list(slides_result)
     return PresentationWithSlides(
@@ -1465,9 +1447,7 @@ async def duplicate_presentation(
 
     slides = list(
         await sql_session.scalars(
-            select(SlideModel)
-            .where(SlideModel.presentation == id)
-            .order_by(SlideModel.index)
+            select(SlideModel).where(SlideModel.presentation == id).order_by(SlideModel.index)
         )
     )
     new_presentation = presentation.get_new_presentation()
@@ -1528,17 +1508,17 @@ async def export_existing_presentation(
 @PRESENTATION_ROUTER.post("/create", response_model=PresentationModel)
 async def create_presentation(
     content: Annotated[str, Body()],
-    n_slides: Annotated[Optional[int], Body()] = None,
-    language: Annotated[Optional[str], Body()] = None,
-    file_paths: Annotated[Optional[List[str]], Body()] = None,
+    n_slides: Annotated[int | None, Body()] = None,
+    language: Annotated[str | None, Body()] = None,
+    file_paths: Annotated[list[str] | None, Body()] = None,
     tone: Annotated[Tone, Body()] = Tone.DEFAULT,
     verbosity: Annotated[Verbosity, Body()] = Verbosity.STANDARD,
-    instructions: Annotated[Optional[str], Body()] = None,
+    instructions: Annotated[str | None, Body()] = None,
     include_table_of_contents: Annotated[bool, Body()] = False,
     include_title_slide: Annotated[bool, Body()] = True,
     web_search: Annotated[bool, Body()] = False,
     generation_mode: Annotated[Literal["standard", "smart"], Body()] = "standard",
-    community_design_ids: Annotated[Optional[List[int]], Body()] = None,
+    community_design_ids: Annotated[list[int] | None, Body()] = None,
     sql_session: AsyncSession = Depends(get_async_session),
 ):
 
@@ -1558,7 +1538,7 @@ async def create_presentation(
         raise HTTPException(
             status_code=400,
             detail="Number of slides cannot be less than 3 if table of contents is included",
-    )
+        )
 
     normalized_community_ids = normalize_community_ids(community_design_ids)
     if generation_mode != "smart" and normalized_community_ids:
@@ -1577,9 +1557,7 @@ async def create_presentation(
     presentation_id = uuid.uuid4()
     language_to_store = (language or "").strip()
     validated_file_paths = (
-        TEMP_FILE_SERVICE.resolve_existing_temp_paths(file_paths)
-        if file_paths
-        else None
+        TEMP_FILE_SERVICE.resolve_existing_temp_paths(file_paths) if file_paths else None
     )
     # DB schema stores an int; 0 is used as internal marker for auto slide count.
     n_slides_to_store = n_slides if n_slides is not None else 0
@@ -1672,9 +1650,9 @@ async def create_blank_presentation(
 @PRESENTATION_ROUTER.post("/prepare", response_model=PresentationPrepareResponse)
 async def prepare_presentation(
     presentation_id: Annotated[uuid.UUID, Body()],
-    outlines: Annotated[List[SlideOutlineModel], Body()],
+    outlines: Annotated[list[SlideOutlineModel], Body()],
     layout: Annotated[str, Body()],
-    title: Annotated[Optional[str], Body()] = None,
+    title: Annotated[str | None, Body()] = None,
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     if not outlines:
@@ -1705,13 +1683,11 @@ async def prepare_presentation(
     if structure_layout.ordered:
         presentation_structure = structure_layout.to_presentation_structure()
     else:
-        presentation_structure: PresentationStructureModel = (
-            await generate_presentation_structure(
-                presentation_outline=presentation_outline_model,
-                presentation_layout=structure_layout,
-                instructions=presentation.instructions,
-                source_content=presentation.content,
-            )
+        presentation_structure: PresentationStructureModel = await generate_presentation_structure(
+            presentation_outline=presentation_outline_model,
+            presentation_layout=structure_layout,
+            instructions=presentation.instructions,
+            source_content=presentation.content,
         )
 
     presentation_structure = _normalize_presentation_structure(
@@ -1781,9 +1757,7 @@ async def _stream_smart_presentation(
             if presentation.fonts:
                 yield SSEResponse(
                     event="response",
-                    data=json.dumps(
-                        {"type": "fonts", "fonts": presentation.fonts}
-                    ),
+                    data=json.dumps({"type": "fonts", "fonts": presentation.fonts}),
                 ).to_string()
             for slide in existing_slides:
                 yield SSEResponse(
@@ -1823,9 +1797,7 @@ async def _stream_smart_presentation(
                 else "Preparing Smart presentation"
             )
         ).to_string()
-        references = await load_community_references(
-            presentation.community_design_ids
-        )
+        references = await load_community_references(presentation.community_design_ids)
         community_context = build_community_design_context(references)
         reference_fonts = merge_reference_fonts(references)
 
@@ -1836,9 +1808,7 @@ async def _stream_smart_presentation(
                 file_paths=presentation.file_paths,
                 presentation_language=presentation.language,
             )
-            await documents_loader.load_documents(
-                TEMP_FILE_SERVICE.create_temp_dir()
-            )
+            await documents_loader.load_documents(TEMP_FILE_SERVICE.create_temp_dir())
             source_parts.extend(document for document in documents_loader.documents if document)
 
         if presentation.web_search:
@@ -1856,9 +1826,13 @@ async def _stream_smart_presentation(
         if len(source_context) > 90_000:
             source_context = source_context[:90_000]
 
-        presentation.fonts = presentation.fonts or reference_fonts or {
-            "Inter": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-        }
+        presentation.fonts = (
+            presentation.fonts
+            or reference_fonts
+            or {
+                "Inter": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+            }
+        )
         # Release the request session's read transaction before independent
         # checkpoint sessions begin writing (important for SQLite), while also
         # persisting the resolved slide count and fonts for reconnects.
@@ -1879,9 +1853,7 @@ async def _stream_smart_presentation(
                 )
             )
         ).to_string()
-        streamed_slides: dict[int, SlideModel] = {
-            slide.index: slide for slide in existing_slides
-        }
+        streamed_slides: dict[int, SlideModel] = {slide.index: slide for slide in existing_slides}
         generation_events: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
 
         async def emit_slide(index: int, slide: dict[str, str]) -> None:
@@ -1970,9 +1942,7 @@ async def _stream_smart_presentation(
                 source_context=source_context,
                 community_design_context=community_context,
                 fonts=presentation.fonts,
-                existing_slides=[
-                    {"html": slide.html_content or ""} for slide in existing_slides
-                ],
+                existing_slides=[{"html": slide.html_content or ""} for slide in existing_slides],
                 existing_title=presentation.title,
                 on_slide=emit_slide,
                 on_metrics=emit_metrics,
@@ -1986,7 +1956,7 @@ async def _stream_smart_presentation(
                     event_type, event_value = await asyncio.wait_for(
                         generation_events.get(), timeout=0.1
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 if event_type == "status":
                     yield SSEStatusResponse(status=str(event_value)).to_string()
@@ -1997,9 +1967,7 @@ async def _stream_smart_presentation(
                         raise TypeError("Invalid Smart generation metrics event")
                     yield SSEResponse(
                         event="response",
-                        data=json.dumps(
-                            {"type": "generation_metrics", **metrics.to_dict()}
-                        ),
+                        data=json.dumps({"type": "generation_metrics", **metrics.to_dict()}),
                     ).to_string()
                     continue
                 streamed_slide = event_value
@@ -2080,9 +2048,7 @@ async def _stream_smart_presentation(
             completed_slides = len(
                 list(
                     await progress_session.scalars(
-                        select(SlideModel).where(
-                            SlideModel.presentation == presentation_id
-                        )
+                        select(SlideModel).where(SlideModel.presentation == presentation_id)
                     )
                 )
             )
@@ -2091,9 +2057,7 @@ async def _stream_smart_presentation(
             "source": "generation",
             "status_code": status_code,
             "error_type": exc.__class__.__name__,
-            "retryable": (
-                status_code in {408, 429} or status_code >= 500
-            ),
+            "retryable": (status_code in {408, 429} or status_code >= 500),
             "completed_slides": completed_slides,
             "total_slides": requested_slide_count,
         }
@@ -2150,8 +2114,7 @@ async def stream_presentation(
     )
     if structure.slides != original_structure:
         logger.warning(
-            "Repairing invalid prepared presentation structure: "
-            "presentation_id=%s old=%s new=%s",
+            "Repairing invalid prepared presentation structure: presentation_id=%s old=%s new=%s",
             id,
             original_structure,
             structure.slides,
@@ -2166,7 +2129,7 @@ async def stream_presentation(
         icon_weight = layout.icon_weight
         image_urls_for_slides = get_images_for_slides_from_outline(outline.slides)
 
-        async_assets_generation_tasks: List[asyncio.Task] = []
+        async_assets_generation_tasks: list[asyncio.Task] = []
         asset_events: asyncio.Queue = asyncio.Queue()
         asset_warnings_by_slide: dict[int, list[dict]] = {}
 
@@ -2188,7 +2151,7 @@ async def stream_presentation(
             finally:
                 await asset_events.put(slide_index)
 
-        slides: List[SlideModel] = []
+        slides: list[SlideModel] = []
         yield SSEResponse(
             event="response",
             data=json.dumps({"type": "chunk", "chunk": '{ "slides": [ '}),
@@ -2234,9 +2197,7 @@ async def stream_presentation(
                     image_generation_service,
                     slide,
                     outline_image_urls=(
-                        image_urls_for_slides[i]
-                        if i < len(image_urls_for_slides)
-                        else None
+                        image_urls_for_slides[i] if i < len(image_urls_for_slides) else None
                     ),
                     icon_weight=icon_weight,
                     allow_image_fallback=True,
@@ -2355,10 +2316,10 @@ async def stream_presentation(
 @PRESENTATION_ROUTER.patch("/update", response_model=PresentationWithSlides)
 async def update_presentation(
     id: Annotated[uuid.UUID, Body()],
-    n_slides: Annotated[Optional[int], Body()] = None,
-    title: Annotated[Optional[str], Body()] = None,
-    theme: Annotated[Optional[dict], Body()] = None,
-    slides: Annotated[Optional[List[SlideModel]], Body()] = None,
+    n_slides: Annotated[int | None, Body()] = None,
+    title: Annotated[str | None, Body()] = None,
+    theme: Annotated[dict | None, Body()] = None,
+    slides: Annotated[list[SlideModel] | None, Body()] = None,
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     presentation = await sql_session.get(PresentationModel, id)
@@ -2451,7 +2412,7 @@ async def update_presentation_slide(
 async def check_if_api_request_is_valid(
     request: GeneratePresentationRequest,
     sql_session: AsyncSession = Depends(get_async_session),
-) -> Tuple[uuid.UUID,]:
+) -> tuple[uuid.UUID,]:
     presentation_id = uuid.uuid4()
     print(f"Presentation ID: {presentation_id}")
 
@@ -2474,20 +2435,13 @@ async def check_if_api_request_is_valid(
             detail=f"Number of slides cannot be greater than {MAX_NUMBER_OF_SLIDES}",
         )
 
-    if (
-        request.slides_markdown is not None
-        and len(request.slides_markdown) > MAX_NUMBER_OF_SLIDES
-    ):
+    if request.slides_markdown is not None and len(request.slides_markdown) > MAX_NUMBER_OF_SLIDES:
         raise HTTPException(
             status_code=400,
             detail=f"Number of slides cannot be greater than {MAX_NUMBER_OF_SLIDES}",
         )
 
-    if (
-        request.include_table_of_contents
-        and request.n_slides is not None
-        and request.n_slides < 3
-    ):
+    if request.include_table_of_contents and request.n_slides is not None and request.n_slides < 3:
         raise HTTPException(
             status_code=400,
             detail="Number of slides cannot be less than 3 if table of contents is included",
@@ -2515,15 +2469,13 @@ async def check_if_api_request_is_valid(
 async def generate_presentation_handler(
     request: GeneratePresentationRequest,
     presentation_id: uuid.UUID,
-    async_status: Optional[AsyncTaskModel],
-    export_cookie_header: Optional[str] = None,
-    request_http: Optional[Request] = None,
+    async_status: AsyncTaskModel | None,
+    export_cookie_header: str | None = None,
+    request_http: Request | None = None,
     sql_session: AsyncSession = Depends(get_async_session),
 ):
     try:
-        disconnect_checker = (
-            request_http.is_disconnected if request_http is not None else None
-        )
+        disconnect_checker = request_http.is_disconnected if request_http is not None else None
 
         async def raise_if_client_disconnected() -> None:
             if disconnect_checker and await disconnect_checker():
@@ -2573,12 +2525,10 @@ async def generate_presentation_handler(
             # Finding number of slides to generate by considering table of contents
             n_slides_to_generate = request.n_slides
             if request.include_table_of_contents and request.n_slides is not None:
-                n_slides_to_generate = (
-                    get_no_of_outlines_to_generate_for_n_slides(
-                        n_slides=request.n_slides,
-                        toc=True,
-                        title_slide=request.include_title_slide,
-                    )
+                n_slides_to_generate = get_no_of_outlines_to_generate_for_n_slides(
+                    n_slides=request.n_slides,
+                    toc=True,
+                    title_slide=request.include_title_slide,
                 )
 
             outline_messages = get_outline_messages(
@@ -2623,16 +2573,13 @@ async def generate_presentation_handler(
                 request.include_table_of_contents,
                 disconnect_checker=disconnect_checker,
             ):
-
                 if isinstance(chunk, HTTPException):
                     raise chunk
 
                 presentation_outlines_text += chunk
 
             try:
-                presentation_outlines_json = dict(
-                    dirtyjson.loads(presentation_outlines_text)
-                )
+                presentation_outlines_json = dict(dirtyjson.loads(presentation_outlines_text))
             except Exception:
                 traceback.print_exc()
                 raise HTTPException(
@@ -2658,19 +2605,14 @@ async def generate_presentation_handler(
                 # Overshooting by a slide or two is common and recoverable:
                 # keep the first n and drop the rest. Only undershooting is a
                 # real failure, since there is nothing to pad the deck with.
-                presentation_outlines.slides = presentation_outlines.slides[
-                    :n_slides_to_generate
-                ]
+                presentation_outlines.slides = presentation_outlines.slides[:n_slides_to_generate]
 
             total_outlines = len(presentation_outlines.slides)
 
         else:
             # Setting outlines to slides markdown
             presentation_outlines = PresentationOutlineModel(
-                slides=[
-                    SlideOutlineModel(content=slide)
-                    for slide in request.slides_markdown
-                ]
+                slides=[SlideOutlineModel(content=slide) for slide in request.slides_markdown]
             )
             total_outlines = len(request.slides_markdown)
 
@@ -2742,9 +2684,7 @@ async def generate_presentation_handler(
             if presentation_structure.slides[index] >= total_slide_layouts:
                 presentation_structure.slides[index] = random_slide_index
 
-        should_include_toc = (
-            request.include_table_of_contents and not using_slides_markdown
-        )
+        should_include_toc = request.include_table_of_contents and not using_slides_markdown
         if should_include_toc:
             n_toc_slides = get_no_of_toc_required_for_n_outlines(
                 n_outlines=total_outlines,
@@ -2776,9 +2716,7 @@ async def generate_presentation_handler(
             content=request.content,
             n_slides=final_n_slides,
             language=language_to_use or "",
-            title=get_presentation_title_from_presentation_outline(
-                presentation_outlines
-            ),
+            title=get_presentation_title_from_presentation_outline(presentation_outlines),
             outlines=presentation_outlines.model_dump(),
             layout=layout_payload,
             structure=presentation_structure.model_dump(),
@@ -2803,10 +2741,10 @@ async def generate_presentation_handler(
 
         image_generation_service = ImageGenerationService(get_images_directory())
         async_assets_generation_tasks = []
-        image_warnings: List[dict] = []
+        image_warnings: list[dict] = []
 
         # 7. Generate slide content concurrently (batched), then build slides and fetch assets
-        slides: List[SlideModel] = []
+        slides: list[SlideModel] = []
 
         slide_layout_indices = presentation_structure.slides
         slide_layouts = [layout_model.slides[idx] for idx in slide_layout_indices]
@@ -2834,10 +2772,10 @@ async def generate_presentation_handler(
                 )
                 for i in range(start, end)
             ]
-            batch_contents: List[dict] = await asyncio.gather(*content_tasks)
+            batch_contents: list[dict] = await asyncio.gather(*content_tasks)
 
             # Build slides for this batch
-            batch_slides: List[SlideModel] = []
+            batch_slides: list[SlideModel] = []
             for offset, slide_content in enumerate(batch_contents):
                 i = start + offset
                 slide_layout = slide_layouts[i]
@@ -3021,7 +2959,7 @@ async def _run_generate_presentation_task(
     request: GeneratePresentationRequest,
     presentation_id: uuid.UUID,
     task_id: str,
-    export_cookie_header: Optional[str],
+    export_cookie_header: str | None,
 ) -> None:
     async with async_session_maker() as sql_session:
         async_status = await sql_session.get(AsyncTaskModel, task_id)
@@ -3100,9 +3038,7 @@ async def check_async_presentation_generation_status(
 ):
     status = await sql_session.get(AsyncTaskModel, id)
     if not status:
-        raise HTTPException(
-            status_code=404, detail="No presentation generation task found"
-        )
+        raise HTTPException(status_code=404, detail="No presentation generation task found")
     return status
 
 
@@ -3124,9 +3060,7 @@ async def edit_presentation_with_new_content(
     slides_to_delete = []
     for each_slide in slides:
         updated_content = None
-        new_slide_data = list(
-            filter(lambda x: x.index == each_slide.index, data.slides)
-        )
+        new_slide_data = list(filter(lambda x: x.index == each_slide.index, data.slides))
         if new_slide_data:
             updated_content = deep_update(each_slide.content, new_slide_data[0].content)
             new_slide = each_slide.get_new_slide(presentation.id, updated_content)
@@ -3175,9 +3109,7 @@ async def derive_presentation_from_existing_one(
     new_slides = []
     for each_slide in slides:
         updated_content = None
-        new_slide_data = list(
-            filter(lambda x: x.index == each_slide.index, data.slides)
-        )
+        new_slide_data = list(filter(lambda x: x.index == each_slide.index, data.slides))
         if new_slide_data:
             updated_content = deep_update(each_slide.content, new_slide_data[0].content)
         new_slide = each_slide.get_new_slide(new_presentation.id, updated_content)

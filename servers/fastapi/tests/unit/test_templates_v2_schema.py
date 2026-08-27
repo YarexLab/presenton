@@ -456,12 +456,12 @@ def test_get_component_schema_extracts_infographic_content_without_vector_conten
 
     assert list(properties) == ["progress"]
     assert properties["progress"]["x-element-type"] == "infographic"
-    assert properties["progress"]["properties"]["data"]["oneOf"][0]["properties"][
-        "type"
-    ] == {"const": "progress_bar"}
-    assert properties["progress"]["properties"]["data"]["oneOf"][1]["properties"][
-        "type"
-    ] == {"const": "gauge"}
+    assert properties["progress"]["properties"]["data"]["oneOf"][0]["properties"]["type"] == {
+        "const": "progress_bar"
+    }
+    assert properties["progress"]["properties"]["data"]["oneOf"][1]["properties"]["type"] == {
+        "const": "gauge"
+    }
     assert properties["progress"]["required"] == ["data"]
 
 
@@ -729,9 +729,7 @@ def test_get_template_schema_strips_component_metadata():
                                 "photo": {
                                     "type": "object",
                                     "additionalProperties": False,
-                                    "properties": {
-                                        "image_prompt": {"type": "string"}
-                                    },
+                                    "properties": {"image_prompt": {"type": "string"}},
                                     "required": ["image_prompt"],
                                 }
                             },

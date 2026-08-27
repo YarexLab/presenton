@@ -12,9 +12,7 @@ def _outline() -> SlideOutlineModel:
 
 
 def test_slide_content_prompt_keeps_visual_commands_out_of_output_fields():
-    prompt = generate_slide_content.get_system_prompt(
-        instructions="Create a bar chart on slide 5"
-    )
+    prompt = generate_slide_content.get_system_prompt(instructions="Create a bar chart on slide 5")
 
     assert "visual instructions as production" in prompt
     assert "never emit those instructions" in prompt

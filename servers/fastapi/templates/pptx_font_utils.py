@@ -1,18 +1,19 @@
 import asyncio
 import os
-from pathlib import Path
 import re
 import struct
 import tempfile
 import urllib
-import zipfile
-from functools import lru_cache
-import aiohttp
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional, Sequence, Set, Tuple
-from pydantic import BaseModel
-from pptx import Presentation
+import zipfile
+from collections.abc import Sequence
+from functools import lru_cache
+from pathlib import Path
+
+import aiohttp
 from fontTools.ttLib import TTFont
+from pptx import Presentation
+from pydantic import BaseModel
 
 DEFAULT_GOOGLE_FONT_WEIGHTS = (400, 700)
 PPT_NS = {
@@ -41,39 +42,39 @@ class FontDetail(BaseModel):
 
     file: str
     size_bytes: int
-    error: Optional[str] = None
-    eot_extraction_error: Optional[str] = None
-    family_name: Optional[str] = None
-    subfamily_name: Optional[str] = None
-    unique_id: Optional[str] = None
-    full_name: Optional[str] = None
-    version: Optional[str] = None
-    postscript_name: Optional[str] = None
-    trademark: Optional[str] = None
-    manufacturer: Optional[str] = None
-    designer: Optional[str] = None
-    description: Optional[str] = None
-    vendor_url: Optional[str] = None
-    designer_url: Optional[str] = None
-    license: Optional[str] = None
-    license_url: Optional[str] = None
-    weight_class: Optional[int] = None
-    width_class: Optional[int] = None
-    cap_height: Optional[int] = None
-    x_height: Optional[int] = None
-    ascent: Optional[int] = None
-    descent: Optional[int] = None
-    units_per_em: Optional[int] = None
-    created: Optional[int] = None
-    modified: Optional[int] = None
-    ascender: Optional[int] = None
-    descender: Optional[int] = None
-    line_gap: Optional[int] = None
-    num_glyphs: Optional[int] = None
-    format: Optional[str] = None
+    error: str | None = None
+    eot_extraction_error: str | None = None
+    family_name: str | None = None
+    subfamily_name: str | None = None
+    unique_id: str | None = None
+    full_name: str | None = None
+    version: str | None = None
+    postscript_name: str | None = None
+    trademark: str | None = None
+    manufacturer: str | None = None
+    designer: str | None = None
+    description: str | None = None
+    vendor_url: str | None = None
+    designer_url: str | None = None
+    license: str | None = None
+    license_url: str | None = None
+    weight_class: int | None = None
+    width_class: int | None = None
+    cap_height: int | None = None
+    x_height: int | None = None
+    ascent: int | None = None
+    descent: int | None = None
+    units_per_em: int | None = None
+    created: int | None = None
+    modified: int | None = None
+    ascender: int | None = None
+    descender: int | None = None
+    line_gap: int | None = None
+    num_glyphs: int | None = None
+    format: str | None = None
 
 
-FontAvailability = Tuple[str, Optional[str], List[str]]
+FontAvailability = tuple[str, str | None, list[str]]
 
 
 _STYLE_TOKENS = {
@@ -111,13 +112,11 @@ _STYLE_MODIFIERS = {"semi", "demi", "extra", "ultra"}
 
 def _clean_font_metadata_string(value: str) -> str:
     return "".join(
-        char
-        for char in value
-        if char == "\t" or char == "\n" or char == "\r" or ord(char) >= 32
+        char for char in value if char == "\t" or char == "\n" or char == "\r" or ord(char) >= 32
     ).strip()
 
 
-def _normalize_font_format(value: object) -> Optional[str]:
+def _normalize_font_format(value: object) -> str | None:
     if not value:
         return None
     if isinstance(value, bytes):
@@ -142,7 +141,7 @@ def normalize_font_family_name(raw_name: str) -> str:
             lower_name = lower_name[: -(len(style) + 1)]
             break
     tokens_original = name.split(" ")
-    tokens_filtered: List[str] = []
+    tokens_filtered: list[str] = []
     for index, tok in enumerate(tokens_original):
         lower_tok = tok.lower()
         if index == 0:
@@ -160,8 +159,8 @@ def normalize_font_family_name(raw_name: str) -> str:
 
 def build_google_fonts_stylesheet_url(
     family_name: str,
-    weights: Optional[Sequence[int]] = DEFAULT_GOOGLE_FONT_WEIGHTS,
-    variants: Optional[Sequence[str]] = None,
+    weights: Sequence[int] | None = DEFAULT_GOOGLE_FONT_WEIGHTS,
+    variants: Sequence[str] | None = None,
 ) -> str:
     encoded_family = urllib.parse.quote_plus(family_name)
     requested_variants = set(variants or [])
@@ -197,8 +196,8 @@ def build_google_fonts_stylesheet_url(
 
 
 def _resolve_theme_typeface(
-    typeface: Optional[str], theme_fonts: Optional[Dict[str, str]] = None
-) -> Optional[str]:
+    typeface: str | None, theme_fonts: dict[str, str] | None = None
+) -> str | None:
     if not typeface:
         return None
     cleaned = typeface.strip()
@@ -214,9 +213,9 @@ def _resolve_theme_typeface(
 
 
 def _extract_typefaces_from_text_style_node(
-    text_style_node: ET.Element, theme_fonts: Optional[Dict[str, str]] = None
-) -> List[str]:
-    fonts: List[str] = []
+    text_style_node: ET.Element, theme_fonts: dict[str, str] | None = None
+) -> list[str]:
+    fonts: list[str] = []
     seen = set()
     font_tags = _FONT_TAGS
     latin_elem = text_style_node.find("a:latin", PPT_NS)
@@ -241,16 +240,16 @@ def _extract_typefaces_from_text_style_node(
 
 
 def _extract_fonts_from_xml_root(
-    root: ET.Element, theme_fonts: Optional[Dict[str, str]] = None
-) -> Set[str]:
-    fonts: Set[str] = set()
+    root: ET.Element, theme_fonts: dict[str, str] | None = None
+) -> set[str]:
+    fonts: set[str] = set()
     for style_tag in _TEXT_STYLE_TAGS:
         for style_elem in root.findall(f".//{style_tag}", PPT_NS):
             fonts.update(_extract_typefaces_from_text_style_node(style_elem, theme_fonts))
     return fonts
 
 
-def extract_fonts_from_oxml(xml_content: str) -> List[str]:
+def extract_fonts_from_oxml(xml_content: str) -> list[str]:
     """Extract font names referenced by text style nodes inside PPTX XML."""
     try:
         root = ET.fromstring(xml_content)
@@ -261,21 +260,21 @@ def extract_fonts_from_oxml(xml_content: str) -> List[str]:
 
 
 # Helper: Fetch TTF/OTF file URLs for a Google Fonts family via Webfonts Developer API
-async def get_google_font_file_urls(family_name: str, api_key: str) -> List[str]:
+async def get_google_font_file_urls(family_name: str, api_key: str) -> list[str]:
     encoded_family = urllib.parse.quote_plus(family_name)
-    api_url = f"https://www.googleapis.com/webfonts/v1/webfonts?family={encoded_family}&key={api_key}"
+    api_url = (
+        f"https://www.googleapis.com/webfonts/v1/webfonts?family={encoded_family}&key={api_key}"
+    )
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                api_url, timeout=aiohttp.ClientTimeout(total=20)
-            ) as resp:
+            async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
                 if resp.status != 200:
                     return []
                 data = await resp.json()
                 items = data.get("items", []) or []
                 if not items:
                     return []
-                urls: List[str] = []
+                urls: list[str] = []
                 # Take first matching family
                 files = (items[0] or {}).get("files", {}) or {}
                 for _variant, url in files.items():
@@ -292,15 +291,13 @@ async def get_google_font_file_urls(family_name: str, api_key: str) -> List[str]
 
 
 async def check_google_font_availability(
-    font_name: str, variants: Optional[Sequence[str]] = None
+    font_name: str, variants: Sequence[str] | None = None
 ) -> bool:
     """Return True when Google Fonts serves the requested family/variants."""
     try:
         url = build_google_fonts_stylesheet_url(font_name, variants=variants)
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url, timeout=aiohttp.ClientTimeout(total=10)
-            ) as response:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
                 if response.status != 200:
                     return False
                 css = await response.text()
@@ -314,11 +311,11 @@ async def check_google_font_availability(
 
 def extract_raw_fonts_and_embedded_details(
     pptx_path: str, temp_dir: str
-) -> Tuple[Set[str], List[FontDetail], List[str]]:
+) -> tuple[set[str], list[FontDetail], list[str]]:
     raw_fonts = extract_used_fonts_from_pptx(pptx_path)
 
-    emb_font_details: List[FontDetail] = []
-    emb_font_paths: List[str] = []
+    emb_font_details: list[FontDetail] = []
+    emb_font_paths: list[str] = []
 
     if not raw_fonts:
         return raw_fonts, emb_font_details, emb_font_paths
@@ -351,7 +348,7 @@ def extract_raw_fonts_and_embedded_details(
     return raw_fonts, emb_font_details, emb_font_paths
 
 
-def normalize_font_variants(variants: Optional[Sequence[str]]) -> List[str]:
+def normalize_font_variants(variants: Sequence[str] | None) -> list[str]:
     order = ("regular", "bold", "italic", "bold_italic")
     variant_set = set(variants or [])
     if not variant_set:
@@ -359,20 +356,18 @@ def normalize_font_variants(variants: Optional[Sequence[str]]) -> List[str]:
     return [variant for variant in order if variant in variant_set]
 
 
-def _merge_font_variants(
-    target: Dict[str, Set[str]], source: Dict[str, Set[str]]
-) -> None:
+def _merge_font_variants(target: dict[str, set[str]], source: dict[str, set[str]]) -> None:
     for font_name, variants in source.items():
         target.setdefault(font_name, set()).update(variants)
 
 
-def _is_truthy_ooxml_flag(value: Optional[str]) -> bool:
+def _is_truthy_ooxml_flag(value: str | None) -> bool:
     return str(value or "").lower() in {"1", "true", "on"}
 
 
 def _font_style_variant(
     font_name: str,
-    r_pr: Optional[ET.Element],
+    r_pr: ET.Element | None,
     default_rprs: Sequence[ET.Element] = (),
 ) -> str:
     bold = False
@@ -406,7 +401,7 @@ def _font_style_variant(
     return "regular"
 
 
-def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
+def extract_used_font_variants_from_pptx(pptx_path: str) -> dict[str, set[str]]:
     """Return font names and regular/bold/italic variants used by slide content."""
 
     def _local_name(tag: str) -> str:
@@ -414,15 +409,13 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
             return tag.rsplit("}", 1)[-1]
         return tag
 
-    def _read_zip_xml(zip_ref: zipfile.ZipFile, path: str) -> Optional[ET.Element]:
+    def _read_zip_xml(zip_ref: zipfile.ZipFile, path: str) -> ET.Element | None:
         try:
             return ET.fromstring(zip_ref.read(path))
         except Exception:
             return None
 
-    def _get_relationships(
-        zip_ref: zipfile.ZipFile, path: str
-    ) -> Dict[str, Dict[str, str]]:
+    def _get_relationships(zip_ref: zipfile.ZipFile, path: str) -> dict[str, dict[str, str]]:
         dir_name = os.path.dirname(path)
         filename = os.path.basename(path)
         rels_path = os.path.join(dir_name, "_rels", f"{filename}.rels").replace("\\", "/")
@@ -430,7 +423,7 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
         if rels_xml is None:
             return {}
 
-        rels: Dict[str, Dict[str, str]] = {}
+        rels: dict[str, dict[str, str]] = {}
         for rel in rels_xml.findall(f"{{{REL_NS}}}Relationship"):
             rel_id = rel.get("Id")
             rel_type = rel.get("Type")
@@ -440,23 +433,17 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
             if target.startswith("/"):
                 resolved = target[1:]
             else:
-                resolved = os.path.normpath(os.path.join(dir_name, target)).replace(
-                    "\\", "/"
-                )
+                resolved = os.path.normpath(os.path.join(dir_name, target)).replace("\\", "/")
             rels[rel_id] = {"path": resolved, "type": rel_type}
         return rels
 
-    def _load_theme_fonts(zip_ref: zipfile.ZipFile) -> Dict[str, str]:
+    def _load_theme_fonts(zip_ref: zipfile.ZipFile) -> dict[str, str]:
         presentation_xml = _read_zip_xml(zip_ref, "ppt/presentation.xml")
         if presentation_xml is None:
             return {}
         pres_rels = _get_relationships(zip_ref, "ppt/presentation.xml")
         theme_path = next(
-            (
-                rel["path"]
-                for rel in pres_rels.values()
-                if "theme" in rel.get("type", "")
-            ),
+            (rel["path"] for rel in pres_rels.values() if "theme" in rel.get("type", "")),
             "ppt/theme/theme1.xml",
         )
         theme_xml = _read_zip_xml(zip_ref, theme_path)
@@ -467,7 +454,7 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
         if font_scheme is None:
             return {}
 
-        theme_fonts: Dict[str, str] = {}
+        theme_fonts: dict[str, str] = {}
         major = font_scheme.find("a:majorFont/a:latin", PPT_NS)
         minor = font_scheme.find("a:minorFont/a:latin", PPT_NS)
         if major is not None and major.get("typeface"):
@@ -476,7 +463,7 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
             theme_fonts["minor"] = minor.get("typeface", "").strip()
         return theme_fonts
 
-    def _get_slide_paths(zip_ref: zipfile.ZipFile) -> List[str]:
+    def _get_slide_paths(zip_ref: zipfile.ZipFile) -> list[str]:
         presentation_xml = _read_zip_xml(zip_ref, "ppt/presentation.xml")
         pres_rels = _get_relationships(zip_ref, "ppt/presentation.xml")
         if presentation_xml is None:
@@ -496,7 +483,7 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
         if slide_id_list is None:
             return []
 
-        slide_paths: List[str] = []
+        slide_paths: list[str] = []
         rel_attr = f"{{{PPT_NS['r']}}}id"
         for slide_id in slide_id_list.findall("p:sldId", PPT_NS):
             rel_id = slide_id.get(rel_attr)
@@ -528,7 +515,7 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
             return False
         return c_nv_pr.get("hidden") in {"1", "true"}
 
-    def _get_placeholder_key(shape: ET.Element) -> Optional[Tuple[str, Optional[str]]]:
+    def _get_placeholder_key(shape: ET.Element) -> tuple[str, str | None] | None:
         nv_sp_pr = shape.find("p:nvSpPr", PPT_NS)
         if nv_sp_pr is None:
             return None
@@ -548,12 +535,12 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
         return "other"
 
     def _build_placeholder_text_style_map(
-        layout_xml: Optional[ET.Element], master_xml: Optional[ET.Element]
-    ) -> Dict[Tuple[str, Optional[str]], Dict[int, List[ET.Element]]]:
-        style_map: Dict[Tuple[str, Optional[str]], Dict[int, List[ET.Element]]] = {}
+        layout_xml: ET.Element | None, master_xml: ET.Element | None
+    ) -> dict[tuple[str, str | None], dict[int, list[ET.Element]]]:
+        style_map: dict[tuple[str, str | None], dict[int, list[ET.Element]]] = {}
 
         tx_styles = master_xml.find("p:txStyles", PPT_NS) if master_xml is not None else None
-        txstyle_defaults: Dict[str, Dict[int, ET.Element]] = {}
+        txstyle_defaults: dict[str, dict[int, ET.Element]] = {}
         if tx_styles is not None:
             for name, key in (
                 ("p:titleStyle", "title"),
@@ -563,7 +550,7 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
                 style_elem = tx_styles.find(name, PPT_NS)
                 if style_elem is None:
                     continue
-                per_level: Dict[int, ET.Element] = {}
+                per_level: dict[int, ET.Element] = {}
                 for level in range(1, 10):
                     lvl_pr = style_elem.find(f"a:lvl{level}pPr", PPT_NS)
                     if lvl_pr is None:
@@ -586,16 +573,12 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
                 placeholder_key = _get_placeholder_key(child)
                 if not placeholder_key:
                     continue
-                base_defaults = txstyle_defaults.get(
-                    _placeholder_style_key(placeholder_key[0]), {}
-                )
+                base_defaults = txstyle_defaults.get(_placeholder_style_key(placeholder_key[0]), {})
                 tx_body = child.find("p:txBody", PPT_NS)
-                lst_style = (
-                    tx_body.find("a:lstStyle", PPT_NS) if tx_body is not None else None
-                )
-                per_level: Dict[int, List[ET.Element]] = {}
+                lst_style = tx_body.find("a:lstStyle", PPT_NS) if tx_body is not None else None
+                per_level: dict[int, list[ET.Element]] = {}
                 for level in range(1, 10):
-                    defaults: List[ET.Element] = []
+                    defaults: list[ET.Element] = []
                     if lst_style is not None:
                         lvl_pr = lst_style.find(f"a:lvl{level}pPr", PPT_NS)
                         if lvl_pr is not None:
@@ -610,7 +593,7 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
                     style_map[placeholder_key] = per_level
         return style_map
 
-    def _paragraph_level(p_pr: Optional[ET.Element]) -> int:
+    def _paragraph_level(p_pr: ET.Element | None) -> int:
         if p_pr is None:
             return 0
         level_value = p_pr.get("lvl")
@@ -621,11 +604,11 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
         except ValueError:
             return 0
 
-    def _build_local_text_style_map(tx_body: ET.Element) -> Dict[int, List[ET.Element]]:
+    def _build_local_text_style_map(tx_body: ET.Element) -> dict[int, list[ET.Element]]:
         lst_style = tx_body.find("a:lstStyle", PPT_NS)
         if lst_style is None:
             return {}
-        local_map: Dict[int, List[ET.Element]] = {}
+        local_map: dict[int, list[ET.Element]] = {}
         for level in range(1, 10):
             lvl_pr = lst_style.find(f"a:lvl{level}pPr", PPT_NS)
             if lvl_pr is None:
@@ -636,15 +619,13 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
         return local_map
 
     def _get_default_rprs(
-        p_pr: Optional[ET.Element],
-        local_text_styles: Dict[int, List[ET.Element]],
-        placeholder_text_styles: Optional[
-            Dict[Tuple[str, Optional[str]], Dict[int, List[ET.Element]]]
-        ],
-        placeholder_key: Optional[Tuple[str, Optional[str]]],
-    ) -> List[ET.Element]:
+        p_pr: ET.Element | None,
+        local_text_styles: dict[int, list[ET.Element]],
+        placeholder_text_styles: dict[tuple[str, str | None], dict[int, list[ET.Element]]] | None,
+        placeholder_key: tuple[str, str | None] | None,
+    ) -> list[ET.Element]:
         level = _paragraph_level(p_pr)
-        defaults: List[ET.Element] = list(local_text_styles.get(level, []))
+        defaults: list[ET.Element] = list(local_text_styles.get(level, []))
         if not placeholder_text_styles or not placeholder_key:
             return defaults
         style_map = placeholder_text_styles.get(placeholder_key)
@@ -655,11 +636,11 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
         return defaults
 
     def _extract_effective_run_font_variants(
-        r_pr: Optional[ET.Element],
+        r_pr: ET.Element | None,
         default_rprs: Sequence[ET.Element],
-        theme_fonts: Dict[str, str],
-    ) -> Dict[str, Set[str]]:
-        variant_fonts: Dict[str, Set[str]] = {}
+        theme_fonts: dict[str, str],
+    ) -> dict[str, set[str]]:
+        variant_fonts: dict[str, set[str]] = {}
         if r_pr is not None:
             direct_fonts = _extract_typefaces_from_text_style_node(r_pr, theme_fonts)
             if direct_fonts:
@@ -669,9 +650,7 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
                     )
                 return variant_fonts
         for default_rpr in default_rprs:
-            inherited_fonts = _extract_typefaces_from_text_style_node(
-                default_rpr, theme_fonts
-            )
+            inherited_fonts = _extract_typefaces_from_text_style_node(default_rpr, theme_fonts)
             if inherited_fonts:
                 for font_name in inherited_fonts:
                     variant_fonts.setdefault(font_name, set()).add(
@@ -682,13 +661,11 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
 
     def _collect_fonts_from_text_body(
         tx_body: ET.Element,
-        placeholder_text_styles: Optional[
-            Dict[Tuple[str, Optional[str]], Dict[int, List[ET.Element]]]
-        ],
-        placeholder_key: Optional[Tuple[str, Optional[str]]],
-        theme_fonts: Dict[str, str],
-    ) -> Dict[str, Set[str]]:
-        font_variants: Dict[str, Set[str]] = {}
+        placeholder_text_styles: dict[tuple[str, str | None], dict[int, list[ET.Element]]] | None,
+        placeholder_key: tuple[str, str | None] | None,
+        theme_fonts: dict[str, str],
+    ) -> dict[str, set[str]]:
+        font_variants: dict[str, set[str]] = {}
         local_text_styles = _build_local_text_style_map(tx_body)
         run_tags = {f"{{{PPT_NS['a']}}}r", f"{{{PPT_NS['a']}}}fld"}
 
@@ -724,13 +701,12 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
 
     def _collect_fonts_from_shape_tree(
         sp_tree: ET.Element,
-        theme_fonts: Dict[str, str],
+        theme_fonts: dict[str, str],
         skip_placeholders: bool = False,
-        placeholder_text_styles: Optional[
-            Dict[Tuple[str, Optional[str]], Dict[int, List[ET.Element]]]
-        ] = None,
-    ) -> Dict[str, Set[str]]:
-        font_variants: Dict[str, Set[str]] = {}
+        placeholder_text_styles: dict[tuple[str, str | None], dict[int, list[ET.Element]]]
+        | None = None,
+    ) -> dict[str, set[str]]:
+        font_variants: dict[str, set[str]] = {}
         for shape in _iter_shape_nodes(sp_tree):
             if _is_hidden(shape):
                 continue
@@ -762,7 +738,7 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
                 )
         return font_variants
 
-    raw_font_variants: Dict[str, Set[str]] = {}
+    raw_font_variants: dict[str, set[str]] = {}
     try:
         with zipfile.ZipFile(pptx_path, "r") as zip_ref:
             theme_fonts = _load_theme_fonts(zip_ref)
@@ -782,9 +758,7 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
                 )
 
                 layout_xml = _read_zip_xml(zip_ref, layout_path) if layout_path else None
-                layout_rels = (
-                    _get_relationships(zip_ref, layout_path) if layout_path else {}
-                )
+                layout_rels = _get_relationships(zip_ref, layout_path) if layout_path else {}
                 master_path = next(
                     (
                         rel["path"]
@@ -794,9 +768,7 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
                     None,
                 )
                 master_xml = _read_zip_xml(zip_ref, master_path) if master_path else None
-                placeholder_text_styles = _build_placeholder_text_style_map(
-                    layout_xml, master_xml
-                )
+                placeholder_text_styles = _build_placeholder_text_style_map(layout_xml, master_xml)
 
                 if master_xml is not None:
                     master_sp_tree = master_xml.find(".//p:spTree", PPT_NS)
@@ -848,14 +820,14 @@ def extract_used_font_variants_from_pptx(pptx_path: str) -> Dict[str, Set[str]]:
     return raw_font_variants
 
 
-def extract_used_fonts_from_pptx(pptx_path: str) -> Set[str]:
+def extract_used_fonts_from_pptx(pptx_path: str) -> set[str]:
     """Return all font names referenced in a PPTX (slides, masters, layouts, theme)."""
     return set(extract_used_font_variants_from_pptx(pptx_path).keys())
 
 
 async def get_available_and_unavailable_fonts_for_pptx(
     pptx_path: str, temp_dir: str
-) -> Tuple[List[FontAvailability], List[FontAvailability]]:
+) -> tuple[list[FontAvailability], list[FontAvailability]]:
     """
     Return lists of available/unavailable fonts for a PPTX file.
 
@@ -872,14 +844,12 @@ async def get_available_and_unavailable_fonts_for_pptx(
         pptx_path,
         temp_dir,
     )
-    font_variants_by_name = await asyncio.to_thread(
-        extract_used_font_variants_from_pptx, pptx_path
-    )
+    font_variants_by_name = await asyncio.to_thread(extract_used_font_variants_from_pptx, pptx_path)
 
     if not raw_fonts:
         return [], []
 
-    requested_variant_keys: Dict[Tuple[str, str], str] = {}
+    requested_variant_keys: dict[tuple[str, str], str] = {}
     for font_name in raw_fonts:
         normalized_name = normalize_font_family_name(font_name)
         if not normalized_name:
@@ -887,11 +857,9 @@ async def get_available_and_unavailable_fonts_for_pptx(
         for variant in normalize_font_variants(font_variants_by_name.get(font_name)):
             requested_variant_keys.setdefault((normalized_name, variant), font_name)
 
-    found_fonts_with_url: Dict[Tuple[str, str], Tuple[str, str]] = {}
+    found_fonts_with_url: dict[tuple[str, str], tuple[str, str]] = {}
     for font_name in raw_fonts:
-        match_index = get_index_of_matching_font_detail_or_none(
-            font_name, emb_font_details
-        )
+        match_index = get_index_of_matching_font_detail_or_none(font_name, emb_font_details)
         if match_index is None:
             continue
         normalized_name = normalize_font_family_name(font_name)
@@ -903,13 +871,13 @@ async def get_available_and_unavailable_fonts_for_pptx(
                 "https://example.com/just-a-placeholder-url.ttf",
             )
 
-    fonts_to_check: Dict[str, Set[str]] = {}
+    fonts_to_check: dict[str, set[str]] = {}
     for normalized_name, variant in requested_variant_keys:
         if (normalized_name, variant) in found_fonts_with_url:
             continue
         fonts_to_check.setdefault(normalized_name, set()).add(variant)
 
-    availability_results: List[bool] = []
+    availability_results: list[bool] = []
     if fonts_to_check:
         availability_results = await asyncio.gather(
             *[
@@ -921,17 +889,13 @@ async def get_available_and_unavailable_fonts_for_pptx(
             ]
         )
 
-    available_fonts: List[FontAvailability] = []
-    unavailable_fonts: List[FontAvailability] = []
+    available_fonts: list[FontAvailability] = []
+    unavailable_fonts: list[FontAvailability] = []
 
-    for (_normalized_name, variant), (font_name, font_url) in sorted(
-        found_fonts_with_url.items()
-    ):
+    for (_normalized_name, variant), (font_name, font_url) in sorted(found_fonts_with_url.items()):
         available_fonts.append((font_name, font_url, [variant]))
 
-    for (font, variants), is_available in zip(
-        sorted(fonts_to_check.items()), availability_results
-    ):
+    for (font, variants), is_available in zip(sorted(fonts_to_check.items()), availability_results):
         normalized_font_variants = normalize_font_variants(variants)
         if is_available:
             google_fonts_url = build_google_fonts_stylesheet_url(
@@ -946,18 +910,16 @@ async def get_available_and_unavailable_fonts_for_pptx(
 
 
 def create_font_alias_config(
-    raw_fonts: List[str],
-    extra_includes: Optional[List[str]] = None,
-    temp_dir: Optional[str] = None,
-    explicit_aliases: Optional[Dict[str, str]] = None,
-    protected_font_names: Optional[Sequence[str]] = None,
+    raw_fonts: list[str],
+    extra_includes: list[str] | None = None,
+    temp_dir: str | None = None,
+    explicit_aliases: dict[str, str] | None = None,
+    protected_font_names: Sequence[str] | None = None,
 ) -> str:
     """Create a fontconfig alias file mapping variant families to normalized names."""
-    mappings: Dict[str, str] = {}
+    mappings: dict[str, str] = {}
     explicit_aliases = {
-        src: dst
-        for src, dst in (explicit_aliases or {}).items()
-        if src and dst and src != dst
+        src: dst for src, dst in (explicit_aliases or {}).items() if src and dst and src != dst
     }
     protected_names = {name for name in (protected_font_names or []) if name}
     explicit_names = set(explicit_aliases.keys()).union(explicit_aliases.values())
@@ -1019,10 +981,10 @@ def create_font_alias_config(
 
 def _replace_fonts_in_xml_root(
     root: ET.Element,
-    font_mapping: Dict[str, str],
-    font_variant_mapping: Optional[Dict[str, Dict[str, str]]] = None,
+    font_mapping: dict[str, str],
+    font_variant_mapping: dict[str, dict[str, str]] | None = None,
 ) -> bool:
-    def _first_typeface(style_elem: Optional[ET.Element]) -> Optional[str]:
+    def _first_typeface(style_elem: ET.Element | None) -> str | None:
         if style_elem is None:
             return None
         for font_tag in _FONT_TAGS:
@@ -1055,9 +1017,7 @@ def _replace_fonts_in_xml_root(
     run_tags = {f"{{{PPT_NS['a']}}}r", f"{{{PPT_NS['a']}}}fld"}
     for paragraph in root.findall(".//a:p", PPT_NS):
         p_pr = paragraph.find("a:pPr", PPT_NS)
-        paragraph_default = (
-            p_pr.find("a:defRPr", PPT_NS) if p_pr is not None else None
-        )
+        paragraph_default = p_pr.find("a:defRPr", PPT_NS) if p_pr is not None else None
         inherited_typeface = _first_typeface(paragraph_default)
         if not inherited_typeface:
             continue
@@ -1097,9 +1057,9 @@ def _replace_fonts_in_xml_root(
 
 def _replace_fonts_in_pptx_xml(
     pptx_path: str,
-    font_mapping: Dict[str, str],
+    font_mapping: dict[str, str],
     output_path: str,
-    font_variant_mapping: Optional[Dict[str, Dict[str, str]]] = None,
+    font_variant_mapping: dict[str, dict[str, str]] | None = None,
 ) -> None:
     xml_prefixes = (
         "ppt/slides/",
@@ -1107,20 +1067,17 @@ def _replace_fonts_in_pptx_xml(
         "ppt/slideMasters/",
         "ppt/charts/",
     )
-    with zipfile.ZipFile(pptx_path, "r") as src, zipfile.ZipFile(
-        output_path, "w", compression=zipfile.ZIP_DEFLATED
-    ) as dst:
+    with (
+        zipfile.ZipFile(pptx_path, "r") as src,
+        zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as dst,
+    ):
         for info in src.infolist():
             data = src.read(info.filename)
             if info.filename.endswith(".xml") and info.filename.startswith(xml_prefixes):
                 try:
                     root = ET.fromstring(data)
-                    if _replace_fonts_in_xml_root(
-                        root, font_mapping, font_variant_mapping
-                    ):
-                        data = ET.tostring(
-                            root, encoding="utf-8", xml_declaration=True
-                        )
+                    if _replace_fonts_in_xml_root(root, font_mapping, font_variant_mapping):
+                        data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
                 except Exception:
                     pass
             dst.writestr(info, data)
@@ -1128,9 +1085,9 @@ def _replace_fonts_in_pptx_xml(
 
 def replace_fonts_in_pptx(
     pptx_path: str,
-    font_mapping: Dict[str, str],
+    font_mapping: dict[str, str],
     output_path: str,
-    font_variant_mapping: Optional[Dict[str, Dict[str, str]]] = None,
+    font_variant_mapping: dict[str, dict[str, str]] | None = None,
 ) -> None:
     """
     Replace fonts in a PPTX file using python-pptx.
@@ -1141,9 +1098,7 @@ def replace_fonts_in_pptx(
         output_path: Path to save modified PPTX file
     """
     if font_variant_mapping:
-        _replace_fonts_in_pptx_xml(
-            pptx_path, font_mapping, output_path, font_variant_mapping
-        )
+        _replace_fonts_in_pptx_xml(pptx_path, font_mapping, output_path, font_variant_mapping)
         return
 
     if font_mapping:
@@ -1201,16 +1156,12 @@ def extract_font_from_eot(eot_path: Path) -> bytes:
         eot_size, font_data_size = struct.unpack_from("<II", data, 0)
         font_start = eot_size - font_data_size
         font_end = font_start + font_data_size
-        if (
-            font_data_size > 0
-            and 0 <= font_start < len(data)
-            and font_end <= len(data)
-        ):
+        if font_data_size > 0 and 0 <= font_start < len(data) and font_end <= len(data):
             embedded_font = data[font_start:font_end]
             if embedded_font.startswith(_SFNT_SIGNATURE_BYTES):
                 return embedded_font
 
-    candidate_positions: Set[int] = set()
+    candidate_positions: set[int] = set()
     for signature in _SFNT_SIGNATURE_BYTES:
         position = data.find(signature)
         while position != -1:
@@ -1218,9 +1169,7 @@ def extract_font_from_eot(eot_path: Path) -> bytes:
             position = data.find(signature, position + 1)
 
     if not candidate_positions:
-        raise ValueError(
-            "Could not find embedded font signature (OTTO/ttcf/TTF) in EOT file"
-        )
+        raise ValueError("Could not find embedded font signature (OTTO/ttcf/TTF) in EOT file")
 
     return data[min(candidate_positions) :]
 
@@ -1236,18 +1185,14 @@ def get_font_details(path: str) -> FontDetail:
 
     try:
         # Check if it's an EOT file
-        is_eot = (
-            font_path.suffix.lower() == ".fntdata" or font_path.suffix.lower() == ".eot"
-        )
+        is_eot = font_path.suffix.lower() == ".fntdata" or font_path.suffix.lower() == ".eot"
 
         if is_eot:
             # Extract embedded font from EOT
             try:
                 embedded_font_data = extract_font_from_eot(font_path)
                 # Create a temporary file to hold the extracted font
-                with tempfile.NamedTemporaryFile(
-                    delete=False, suffix=".ttf"
-                ) as tmp_file:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".ttf") as tmp_file:
                     tmp_file.write(embedded_font_data)
                     tmp_path = tmp_file.name
 
@@ -1279,9 +1224,7 @@ def get_font_details(path: str) -> FontDetail:
                 if platform_id in (1, 3) or name_id not in names:
                     try:
                         name_str = (
-                            record.toUnicode()
-                            if hasattr(record, "toUnicode")
-                            else str(record)
+                            record.toUnicode() if hasattr(record, "toUnicode") else str(record)
                         )
                         if name_str:
                             cleaned_name = _clean_font_metadata_string(name_str)
@@ -1515,7 +1458,7 @@ _WEIGHT_CLASS_BUCKETS = (
 )
 
 
-def _normalize_text(value: Optional[str]) -> str:
+def _normalize_text(value: str | None) -> str:
     if not value:
         return ""
     lowered = value.lower()
@@ -1523,7 +1466,7 @@ def _normalize_text(value: Optional[str]) -> str:
     return re.sub(r"\s+", " ", lowered).strip()
 
 
-def _normalize_compact(value: Optional[str]) -> str:
+def _normalize_compact(value: str | None) -> str:
     if not value:
         return ""
     return re.sub(r"[^a-z0-9]+", "", value.lower())
@@ -1555,7 +1498,7 @@ def _get_removal_keywords():
     return tuple(sorted(keywords, key=len, reverse=True))
 
 
-def _family_key(value: Optional[str]) -> str:
+def _family_key(value: str | None) -> str:
     normalized = _normalize_text(value)
     if not normalized:
         return ""
@@ -1568,7 +1511,7 @@ def _family_key(value: Optional[str]) -> str:
     return re.sub(r"\s+", "", target)
 
 
-def _extract_weight_from_name(value: Optional[str]) -> Optional[str]:
+def _extract_weight_from_name(value: str | None) -> str | None:
     normalized = _normalize_text(value)
     if not normalized:
         return None
@@ -1584,7 +1527,7 @@ def _extract_weight_from_name(value: Optional[str]) -> Optional[str]:
     return None
 
 
-def _weight_from_class(weight_class: Optional[int]) -> Optional[str]:
+def _weight_from_class(weight_class: int | None) -> str | None:
     if weight_class is None:
         return None
     for canonical, lower, upper in _WEIGHT_CLASS_BUCKETS:
@@ -1593,7 +1536,7 @@ def _weight_from_class(weight_class: Optional[int]) -> Optional[str]:
     return None
 
 
-def _extract_weight_from_detail(font_detail: FontDetail) -> Optional[str]:
+def _extract_weight_from_detail(font_detail: FontDetail) -> str | None:
     weight = _weight_from_class(font_detail.weight_class)
     if weight:
         return weight
@@ -1608,7 +1551,7 @@ def _extract_weight_from_detail(font_detail: FontDetail) -> Optional[str]:
     return None
 
 
-def _weight_value_from_canonical(weight_key: Optional[str]) -> Optional[int]:
+def _weight_value_from_canonical(weight_key: str | None) -> int | None:
     if not weight_key:
         return None
     for canonical, lower, upper in _WEIGHT_CLASS_BUCKETS:
@@ -1617,7 +1560,7 @@ def _weight_value_from_canonical(weight_key: Optional[str]) -> Optional[int]:
     return None
 
 
-def _weight_value_from_detail(font_detail: FontDetail) -> Optional[int]:
+def _weight_value_from_detail(font_detail: FontDetail) -> int | None:
     canonical = _extract_weight_from_detail(font_detail)
     midpoint = _weight_value_from_canonical(canonical)
     if midpoint is not None:
@@ -1631,7 +1574,7 @@ def _weight_value_from_detail(font_detail: FontDetail) -> Optional[int]:
 
 def get_index_of_matching_font_detail_or_none(
     font_name: str, font_details: Sequence[FontDetail]
-) -> Optional[int]:
+) -> int | None:
     """
     Return the index of the font detail that best matches the provided font name.
     Family equality must match. If the requested weight is unspecified we treat it
@@ -1649,9 +1592,9 @@ def get_index_of_matching_font_detail_or_none(
     expected_weight = font_weight or "regular"
     expected_weight_value = _weight_value_from_canonical(expected_weight) or 400
 
-    best_index: Optional[int] = None
+    best_index: int | None = None
     best_score = -1
-    fallback_index: Optional[int] = None
+    fallback_index: int | None = None
     fallback_diff = float("inf")
 
     for index, font_detail in enumerate(font_details):
@@ -1673,9 +1616,7 @@ def get_index_of_matching_font_detail_or_none(
             continue
 
         detail_weight = _extract_weight_from_detail(font_detail)
-        detail_weight_value = (
-            _weight_value_from_detail(font_detail) or expected_weight_value
-        )
+        detail_weight_value = _weight_value_from_detail(font_detail) or expected_weight_value
 
         score = 1
         if detail_weight == expected_weight:

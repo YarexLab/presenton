@@ -79,12 +79,7 @@ def test_auto_does_not_expose_external_search_when_native_tools_are_unavailable(
     monkeypatch.setenv("WEB_SEARCH_PROVIDER", WebSearchProvider.AUTO.value)
 
     assert web_search.should_use_native_web_search() is True
-    assert (
-        web_search.should_expose_external_web_search_tool(
-            native_search_available=False
-        )
-        is False
-    )
+    assert web_search.should_expose_external_web_search_tool(native_search_available=False) is False
 
 
 def test_format_web_search_context_excludes_source_urls():
@@ -94,8 +89,7 @@ def test_format_web_search_context_excludes_source_urls():
                 title="Presenton",
                 url="https://example.com/presenton",
                 snippet=(
-                    "Presentation generation [6][7] with "
-                    "[documentation](https://example.com/docs)"
+                    "Presentation generation [6][7] with [documentation](https://example.com/docs)"
                 ),
             )
         ]
@@ -122,10 +116,7 @@ def test_explicit_external_provider_is_not_replaced(monkeypatch):
     monkeypatch.setenv("WEB_SEARCH_PROVIDER", WebSearchProvider.SEARXNG.value)
     monkeypatch.setenv("SEARXNG_BASE_URL", "http://127.0.0.1:8080")
 
-    assert (
-        web_search.resolve_external_web_search_provider()
-        == WebSearchProvider.SEARXNG
-    )
+    assert web_search.resolve_external_web_search_provider() == WebSearchProvider.SEARXNG
 
 
 def test_web_search_route_reports_actual_external_provider(monkeypatch):
@@ -181,7 +172,7 @@ def test_search_web_logs_provider_and_clamps_max_results(monkeypatch, caplog):
                 title="Presenton",
                 url="https://example.com/presenton",
             )
-    ]
+        ]
 
     monkeypatch.setenv("WEB_SEARCH_PROVIDER", WebSearchProvider.SEARXNG.value)
     monkeypatch.setattr(
@@ -236,9 +227,7 @@ def test_exa_search_requests_highlights_and_maps_results(monkeypatch):
 
     monkeypatch.setenv("EXA_API_KEY", "test-exa-key")
 
-    results = asyncio.run(
-        web_search._search_exa(FakeSession(), "presentation ai", 2)
-    )
+    results = asyncio.run(web_search._search_exa(FakeSession(), "presentation ai", 2))
 
     assert captured == {
         "url": "https://api.exa.ai/search",

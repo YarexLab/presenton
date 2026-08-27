@@ -8,9 +8,9 @@ from starlette.responses import FileResponse
 
 from api.lifespan import app_lifespan
 from api.middlewares import SessionAuthMiddleware, UserConfigEnvUpdateMiddleware
+from api.v1.admin.router import API_V1_ADMIN_ROUTER
 from api.v1.async_tasks.router import API_V1_ASYNC_TASKS_ROUTER
 from api.v1.auth.router import API_V1_AUTH_ROUTER
-from api.v1.admin.router import API_V1_ADMIN_ROUTER
 from api.v1.mock.router import API_V1_MOCK_ROUTER
 from api.v1.ppt.router import API_V1_PPT_ROUTER
 from api.v1.webhook.router import API_V1_WEBHOOK_ROUTER
@@ -22,7 +22,6 @@ from utils.get_env import (
 )
 from utils.mime_types import init_sandbox_safe_mimetypes
 from utils.path_helpers import get_resource_path
-
 
 init_sandbox_safe_mimetypes()
 
@@ -41,9 +40,7 @@ def _maybe_init_sentry() -> None:
     traces_sample_rate = get_sentry_traces_sample_rate_env()
     send_default_pii = get_sentry_send_default_pii_env()
     try:
-        parsed_sample_rate = (
-            float(traces_sample_rate) if traces_sample_rate is not None else 1.0
-        )
+        parsed_sample_rate = float(traces_sample_rate) if traces_sample_rate is not None else 1.0
     except ValueError:
         parsed_sample_rate = 1.0
 

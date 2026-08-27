@@ -1,31 +1,25 @@
 from pathlib import Path
 
-from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
 
 import migrations
+from alembic import command
 
 
 def _alembic_config(database_url: str) -> Config:
     config = Config()
-    config.set_main_option(
-        "script_location", str(Path(__file__).resolve().parents[2] / "alembic")
-    )
+    config.set_main_option("script_location", str(Path(__file__).resolve().parents[2] / "alembic"))
     config.set_main_option("sqlalchemy.url", database_url)
     return config
 
 
-def test_legacy_database_with_theme_is_stamped_past_theme_migration(
-    tmp_path, monkeypatch
-):
+def test_legacy_database_with_theme_is_stamped_past_theme_migration(tmp_path, monkeypatch):
     database_url = f"sqlite:///{tmp_path / 'legacy.db'}"
     engine = create_engine(database_url)
     try:
         with engine.begin() as connection:
-            connection.execute(
-                text("CREATE TABLE presentations (id TEXT PRIMARY KEY, theme JSON)")
-            )
+            connection.execute(text("CREATE TABLE presentations (id TEXT PRIMARY KEY, theme JSON)"))
     finally:
         engine.dispose()
 
@@ -36,9 +30,7 @@ def test_legacy_database_with_theme_is_stamped_past_theme_migration(
         lambda _config, revision: stamped_revisions.append(revision),
     )
 
-    migrations._stamp_legacy_database_if_needed(
-        _alembic_config(database_url), database_url
-    )
+    migrations._stamp_legacy_database_if_needed(_alembic_config(database_url), database_url)
 
     assert stamped_revisions == [migrations.REVISION_BEFORE_TEMPLATE_CREATE_INFO]
 
@@ -48,9 +40,7 @@ def test_upgrade_from_baseline_stamp_skips_existing_theme_column(tmp_path):
     engine = create_engine(database_url)
     try:
         with engine.begin() as connection:
-            connection.execute(
-                text("CREATE TABLE presentations (id TEXT PRIMARY KEY, theme JSON)")
-            )
+            connection.execute(text("CREATE TABLE presentations (id TEXT PRIMARY KEY, theme JSON)"))
             connection.execute(
                 text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
             )
@@ -66,8 +56,7 @@ def test_upgrade_from_baseline_stamp_skips_existing_theme_column(tmp_path):
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
             columns = {
-                row[1]
-                for row in connection.execute(text("PRAGMA table_info(presentations)"))
+                row[1] for row in connection.execute(text("PRAGMA table_info(presentations)"))
             }
             tables = {
                 row[0]
@@ -75,19 +64,11 @@ def test_upgrade_from_baseline_stamp_skips_existing_theme_column(tmp_path):
                     text("SELECT name FROM sqlite_master WHERE type = 'table'")
                 )
             }
-            user_columns = {
-                row[1]
-                for row in connection.execute(text("PRAGMA table_info('user')"))
-            }
-            user_indexes = {
-                row[1]
-                for row in connection.execute(text("PRAGMA index_list('user')"))
-            }
+            user_columns = {row[1] for row in connection.execute(text("PRAGMA table_info('user')"))}
+            user_indexes = {row[1] for row in connection.execute(text("PRAGMA index_list('user')"))}
             provider_columns = {
                 row[1]
-                for row in connection.execute(
-                    text("PRAGMA table_info('presenton_cloud_provider')")
-                )
+                for row in connection.execute(text("PRAGMA table_info('presenton_cloud_provider')"))
             }
 
         assert version == migrations.REVISION_HEAD
@@ -110,9 +91,7 @@ def test_upgrade_from_theme_stamp_skips_existing_template_create_infos_table(tmp
     engine = create_engine(database_url)
     try:
         with engine.begin() as connection:
-            connection.execute(
-                text("CREATE TABLE presentations (id TEXT PRIMARY KEY, theme JSON)")
-            )
+            connection.execute(text("CREATE TABLE presentations (id TEXT PRIMARY KEY, theme JSON)"))
             connection.execute(
                 text(
                     """
@@ -194,9 +173,7 @@ def test_upgrade_from_template_stamp_skips_existing_chat_history_table(tmp_path)
             ).scalar_one()
             indexes = {
                 row[1]
-                for row in connection.execute(
-                    text("PRAGMA index_list(chat_history_messages)")
-                )
+                for row in connection.execute(text("PRAGMA index_list(chat_history_messages)"))
             }
             tables = {
                 row[0]
@@ -205,8 +182,7 @@ def test_upgrade_from_template_stamp_skips_existing_chat_history_table(tmp_path)
                 )
             }
             template_columns = {
-                row[1]
-                for row in connection.execute(text("PRAGMA table_info(template_v2)"))
+                row[1] for row in connection.execute(text("PRAGMA table_info(template_v2)"))
             }
 
         assert version == migrations.REVISION_HEAD
@@ -273,8 +249,7 @@ def test_consolidated_migration_adds_presentation_version(tmp_path):
                 if row[1] == "version"
             )
             slide_columns = {
-                row[1]
-                for row in connection.execute(text("PRAGMA table_info(slides)"))
+                row[1] for row in connection.execute(text("PRAGMA table_info(slides)"))
             }
 
         assert version == migrations.REVISION_HEAD
@@ -329,9 +304,7 @@ def test_async_task_status_migration_maps_processing_to_pending(tmp_path):
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
             statuses = dict(
-                connection.execute(
-                    text("SELECT id, status FROM async_tasks ORDER BY id")
-                ).all()
+                connection.execute(text("SELECT id, status FROM async_tasks ORDER BY id")).all()
             )
 
         assert version == migrations.REVISION_HEAD
@@ -406,9 +379,7 @@ def test_smart_mode_backfill_repairs_html_presentations(tmp_path):
             ).scalar_one()
             modes = dict(
                 connection.execute(
-                    text(
-                        "SELECT id, generation_mode FROM presentations ORDER BY id"
-                    )
+                    text("SELECT id, generation_mode FROM presentations ORDER BY id")
                 ).all()
             )
 
@@ -421,9 +392,7 @@ def test_smart_mode_backfill_repairs_html_presentations(tmp_path):
         engine.dispose()
 
 
-def test_unversioned_database_with_async_tasks_stamps_before_status_cleanup(
-    tmp_path, monkeypatch
-):
+def test_unversioned_database_with_async_tasks_stamps_before_status_cleanup(tmp_path, monkeypatch):
     database_url = f"sqlite:///{tmp_path / 'legacy-async-tasks.db'}"
     engine = create_engine(database_url)
     try:
@@ -450,16 +419,12 @@ def test_unversioned_database_with_async_tasks_stamps_before_status_cleanup(
         lambda _config, revision: stamped_revisions.append(revision),
     )
 
-    migrations._stamp_legacy_database_if_needed(
-        _alembic_config(database_url), database_url
-    )
+    migrations._stamp_legacy_database_if_needed(_alembic_config(database_url), database_url)
 
     assert stamped_revisions == [migrations.REVISION_ASYNC_TASKS]
 
 
-def test_unversioned_database_with_chat_history_stamps_before_template_v2(
-    tmp_path, monkeypatch
-):
+def test_unversioned_database_with_chat_history_stamps_before_template_v2(tmp_path, monkeypatch):
     database_url = f"sqlite:///{tmp_path / 'legacy-chat.db'}"
     engine = create_engine(database_url)
     try:
@@ -491,9 +456,7 @@ def test_unversioned_database_with_chat_history_stamps_before_template_v2(
         lambda _config, revision: stamped_revisions.append(revision),
     )
 
-    migrations._stamp_legacy_database_if_needed(
-        _alembic_config(database_url), database_url
-    )
+    migrations._stamp_legacy_database_if_needed(_alembic_config(database_url), database_url)
 
     assert stamped_revisions == [migrations.REVISION_CHAT_HISTORY]
 
@@ -519,8 +482,7 @@ def test_upgrade_from_template_v2_revision_adds_slide_ui(tmp_path):
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
             slide_columns = {
-                row[1]
-                for row in connection.execute(text("PRAGMA table_info(slides)"))
+                row[1] for row in connection.execute(text("PRAGMA table_info(slides)"))
             }
 
         assert version == migrations.REVISION_HEAD
@@ -639,9 +601,7 @@ def test_upgrade_from_font_uploads_revision_converts_template_v2_ids_to_strings(
             version = connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            stored_template_id = connection.execute(
-                text("SELECT id FROM template_v2")
-            ).scalar_one()
+            stored_template_id = connection.execute(text("SELECT id FROM template_v2")).scalar_one()
             stored_chat_template_id = connection.execute(
                 text("SELECT template_v2_id FROM chat_history_messages")
             ).scalar_one()
@@ -652,14 +612,11 @@ def test_upgrade_from_font_uploads_revision_converts_template_v2_ids_to_strings(
             )
             chat_template_id_type = next(
                 row[2]
-                for row in connection.execute(
-                    text("PRAGMA table_info(chat_history_messages)")
-                )
+                for row in connection.execute(text("PRAGMA table_info(chat_history_messages)"))
                 if row[1] == "template_v2_id"
             )
             template_columns = {
-                row[1]
-                for row in connection.execute(text("PRAGMA table_info(template_v2)"))
+                row[1] for row in connection.execute(text("PRAGMA table_info(template_v2)"))
             }
 
         assert version == migrations.REVISION_HEAD
@@ -704,9 +661,7 @@ def test_unversioned_database_with_old_template_v2_stamps_before_consolidated(
         lambda _config, revision: stamped_revisions.append(revision),
     )
 
-    migrations._stamp_legacy_database_if_needed(
-        _alembic_config(database_url), database_url
-    )
+    migrations._stamp_legacy_database_if_needed(_alembic_config(database_url), database_url)
 
     assert stamped_revisions == [migrations.REVISION_CHAT_HISTORY]
 
@@ -747,9 +702,7 @@ def test_unversioned_database_with_template_v2_artifacts_stamps_before_consolida
         lambda _config, revision: stamped_revisions.append(revision),
     )
 
-    migrations._stamp_legacy_database_if_needed(
-        _alembic_config(database_url), database_url
-    )
+    migrations._stamp_legacy_database_if_needed(_alembic_config(database_url), database_url)
 
     assert stamped_revisions == [migrations.REVISION_CHAT_HISTORY]
 
@@ -805,8 +758,7 @@ def test_removed_intermediate_revision_upgrades_through_consolidated_migration(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
             template_columns = {
-                row[1]
-                for row in connection.execute(text("PRAGMA table_info(template_v2)"))
+                row[1] for row in connection.execute(text("PRAGMA table_info(template_v2)"))
             }
 
         assert version == migrations.REVISION_HEAD
@@ -823,9 +775,7 @@ def test_upgrade_from_previous_head_adds_template_v2_theme(tmp_path):
     engine = create_engine(database_url)
     try:
         with engine.begin() as connection:
-            connection.execute(
-                text("CREATE TABLE template_v2 (id VARCHAR PRIMARY KEY)")
-            )
+            connection.execute(text("CREATE TABLE template_v2 (id VARCHAR PRIMARY KEY)"))
             connection.execute(
                 text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
             )
@@ -841,8 +791,7 @@ def test_upgrade_from_previous_head_adds_template_v2_theme(tmp_path):
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
             template_columns = {
-                row[1]
-                for row in connection.execute(text("PRAGMA table_info(template_v2)"))
+                row[1] for row in connection.execute(text("PRAGMA table_info(template_v2)"))
             }
 
         assert version == migrations.REVISION_HEAD

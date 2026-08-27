@@ -1,6 +1,5 @@
 import json
 from datetime import datetime
-from typing import Optional
 
 from llmai import get_client
 from llmai.shared import JSONSchemaResponse, Message, SystemMessage, UserMessage
@@ -89,7 +88,7 @@ AUTO_DETECT_LANGUAGE_INSTRUCTION = (
 )
 
 
-def _resolve_prompt_language(language: Optional[str]) -> str:
+def _resolve_prompt_language(language: str | None) -> str:
     if language is None:
         return AUTO_DETECT_LANGUAGE_INSTRUCTION
     s = str(language).strip()
@@ -100,7 +99,7 @@ def _resolve_prompt_language(language: Optional[str]) -> str:
     return s
 
 
-def _get_schema_markdown(response_schema: Optional[dict]) -> str:
+def _get_schema_markdown(response_schema: dict | None) -> str:
     if not response_schema:
         return "- Follow the provided response schema strictly."
     try:
@@ -111,10 +110,10 @@ def _get_schema_markdown(response_schema: Optional[dict]) -> str:
 
 
 def get_system_prompt(
-    tone: Optional[str] = None,
-    verbosity: Optional[str] = None,
-    instructions: Optional[str] = None,
-    response_schema: Optional[dict] = None,
+    tone: str | None = None,
+    verbosity: str | None = None,
+    instructions: str | None = None,
+    response_schema: dict | None = None,
 ):
     markdown_emphasis_rules = (
         "- Strictly use markdown to emphasize important points, by bolding or "
@@ -122,9 +121,7 @@ def get_system_prompt(
     )
 
     user_instructions = f"# User Instructions:\n{instructions}" if instructions else ""
-    tone_instructions = (
-        f"# Tone Instructions:\nMake slide as {tone} as possible." if tone else ""
-    )
+    tone_instructions = f"# Tone Instructions:\nMake slide as {tone} as possible." if tone else ""
 
     verbosity_instructions = ""
     if verbosity:
@@ -136,9 +133,7 @@ def get_system_prompt(
         elif verbosity == "text-heavy":
             verbosity_instructions += "Make slide as text-heavy as possible."
 
-    output_fields_instructions = "# Output Fields:\n" + _get_schema_markdown(
-        response_schema
-    )
+    output_fields_instructions = "# Output Fields:\n" + _get_schema_markdown(response_schema)
 
     return SLIDE_CONTENT_SYSTEM_PROMPT.format(
         markdown_emphasis_rules=markdown_emphasis_rules,
@@ -149,15 +144,13 @@ def get_system_prompt(
     )
 
 
-def _get_slide_number_section(slide_number: Optional[int]) -> str:
+def _get_slide_number_section(slide_number: int | None) -> str:
     if slide_number is None:
         return ""
     return f"# Slide Number:\n{slide_number}\n"
 
 
-def get_user_prompt(
-    outline: str, language: Optional[str], slide_number: Optional[int] = None
-):
+def get_user_prompt(outline: str, language: str | None, slide_number: int | None = None):
     return SLIDE_CONTENT_USER_PROMPT.format(
         current_date_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         language=_resolve_prompt_language(language),
@@ -168,13 +161,13 @@ def get_user_prompt(
 
 def get_messages(
     outline: str,
-    language: Optional[str],
-    tone: Optional[str] = None,
-    verbosity: Optional[str] = None,
-    instructions: Optional[str] = None,
-    response_schema: Optional[dict] = None,
+    language: str | None,
+    tone: str | None = None,
+    verbosity: str | None = None,
+    instructions: str | None = None,
+    response_schema: dict | None = None,
     *,
-    slide_number: Optional[int] = None,
+    slide_number: int | None = None,
 ) -> list[Message]:
 
     return [
@@ -192,7 +185,7 @@ def get_messages(
     ]
 
 
-def _schema_has_content_fields(response_schema: Optional[dict]) -> bool:
+def _schema_has_content_fields(response_schema: dict | None) -> bool:
     if not isinstance(response_schema, dict):
         return False
 
@@ -200,7 +193,7 @@ def _schema_has_content_fields(response_schema: Optional[dict]) -> bool:
     return isinstance(properties, dict) and bool(properties)
 
 
-def _prepare_response_schema(json_schema: Optional[dict]) -> Optional[dict]:
+def _prepare_response_schema(json_schema: dict | None) -> dict | None:
     if not isinstance(json_schema, dict):
         return None
 
@@ -229,13 +222,13 @@ def _prepare_response_schema(json_schema: Optional[dict]) -> Optional[dict]:
 async def get_slide_content_from_type_and_outline(
     slide_layout: SlideLayoutModel,
     outline: SlideOutlineModel,
-    language: Optional[str],
-    tone: Optional[str] = None,
-    verbosity: Optional[str] = None,
-    instructions: Optional[str] = None,
+    language: str | None,
+    tone: str | None = None,
+    verbosity: str | None = None,
+    instructions: str | None = None,
     *,
-    slide_number: Optional[int] = None,
-    disconnect_checker: Optional[DisconnectChecker] = None,
+    slide_number: int | None = None,
+    disconnect_checker: DisconnectChecker | None = None,
 ):
     response_schema = _prepare_response_schema(slide_layout.json_schema)
     if response_schema is None:

@@ -9,7 +9,6 @@ from models.sql.access_token import AccessToken
 from models.sql.user import User
 from services.database import get_async_session
 
-
 TOKEN_ROUTER = APIRouter(prefix="/token", tags=["API Keys"])
 
 

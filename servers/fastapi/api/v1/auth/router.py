@@ -6,10 +6,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import JSONResponse
 
-from api.v1.auth.schemas import AuthCredentialsRequest, LoginCredentialsRequest
 from api.v1.auth.assets import is_app_data_path_authorized
-from api.v1.auth.rate_limit import LOGIN_RATE_LIMITER, login_rate_limit_key
+from api.v1.auth.config import (
+    SESSION_COOKIE_NAME,
+    SESSION_TTL_SECONDS,
+    persist_admin_credentials,
+)
+from api.v1.auth.presenton_oauth import PRESENTON_OAUTH_ROUTER
 from api.v1.auth.principal import resolve_request_principal
+from api.v1.auth.rate_limit import LOGIN_RATE_LIMITER, login_rate_limit_key
+from api.v1.auth.schemas import AuthCredentialsRequest, LoginCredentialsRequest
+from api.v1.auth.token import TOKEN_ROUTER
 from api.v1.auth.users import (
     PASSWORD_HELPER,
     get_jwt_strategy,
@@ -19,14 +26,6 @@ from api.v1.auth.users import (
 from models.sql.user import User
 from services.database import get_async_session
 from utils.get_env import is_disable_auth_enabled
-from api.v1.auth.config import (
-    SESSION_COOKIE_NAME,
-    SESSION_TTL_SECONDS,
-    persist_admin_credentials,
-)
-from api.v1.auth.token import TOKEN_ROUTER
-from api.v1.auth.presenton_oauth import PRESENTON_OAUTH_ROUTER
-
 
 API_V1_AUTH_ROUTER = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 API_V1_AUTH_ROUTER.include_router(TOKEN_ROUTER)
@@ -51,9 +50,7 @@ def _secure_request(request: Request) -> bool:
 def _login_client_host(request: Request) -> str | None:
     peer_host = request.client.host if request.client else None
     try:
-        peer_is_loopback = bool(
-            peer_host and ipaddress.ip_address(peer_host).is_loopback
-        )
+        peer_is_loopback = bool(peer_host and ipaddress.ip_address(peer_host).is_loopback)
     except ValueError:
         peer_is_loopback = False
     if peer_is_loopback:

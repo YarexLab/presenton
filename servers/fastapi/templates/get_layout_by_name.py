@@ -1,9 +1,9 @@
-import logging
 import json
+import logging
 import os
-import aiohttp
 from typing import Any
 
+import aiohttp
 from fastapi import HTTPException
 
 from api.v1.auth.internal import authenticated_internal_request_headers
@@ -60,7 +60,7 @@ def _read_builtin_template_settings(layout_name: str) -> dict[str, Any] | None:
         if not os.path.isfile(settings_path):
             continue
         try:
-            with open(settings_path, "r", encoding="utf-8") as settings_file:
+            with open(settings_path, encoding="utf-8") as settings_file:
                 settings = json.load(settings_file)
             return settings if isinstance(settings, dict) else None
         except Exception as exc:  # noqa: BLE001
@@ -132,9 +132,7 @@ async def get_layout_by_name(layout_name: str) -> PresentationLayoutModel:
         layout_name,
     )
 
-    schema_payload, fallback_error = await _fetch_template_fallback_payload(
-        layout_name
-    )
+    schema_payload, fallback_error = await _fetch_template_fallback_payload(layout_name)
     if schema_payload is None:
         error_detail = fallback_error or "unknown error"
         LOGGER.error(

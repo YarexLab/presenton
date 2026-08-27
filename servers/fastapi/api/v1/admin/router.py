@@ -1,6 +1,6 @@
-import uuid
 import os
 import shutil
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
@@ -18,20 +18,19 @@ from api.v1.auth.users import (
     read_user_from_cookie,
     serialize_user,
 )
-from models.sql.user import User
 from models.sql.key_value import KeyValueSqlModel
+from models.sql.user import User
 from services.database import get_async_session
-from services.provider_settings import get_provider_settings, save_provider_settings
 from services.presenton_cloud import get_presenton_provider, has_cloud_credentials
+from services.provider_settings import get_provider_settings, save_provider_settings
 from utils.get_env import (
     get_app_data_directory_env,
     get_can_change_keys_env,
-    get_temp_directory_env,
     get_presenton_oauth_issuer,
+    get_temp_directory_env,
     is_disable_auth_enabled,
 )
 from utils.user_config import update_env_with_user_config
-
 
 API_V1_ADMIN_ROUTER = APIRouter(prefix="/api/v1/admin", tags=["Admin"])
 
@@ -90,16 +89,12 @@ async def list_users(
     session: AsyncSession = Depends(get_async_session),
 ):
     users = (
-        await session.scalars(
-            select(User).order_by(User.created_at.desc(), User.username.asc())
-        )
+        await session.scalars(select(User).order_by(User.created_at.desc(), User.username.asc()))
     ).all()
     return [serialize_user(user) for user in users]
 
 
-@API_V1_ADMIN_ROUTER.post(
-    "/users", response_model=PublicUser, status_code=status.HTTP_201_CREATED
-)
+@API_V1_ADMIN_ROUTER.post("/users", response_model=PublicUser, status_code=status.HTTP_201_CREATED)
 async def create_user(
     body: AdminCreateUserRequest,
     _: User = Depends(get_current_admin),

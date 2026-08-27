@@ -1,14 +1,14 @@
-from fastapi import HTTPException
-from openai import APIError as OpenAIAPIError
-from google.genai.errors import APIError as GoogleAPIError
 import traceback
 
-from enums.llm_provider import LLMProvider
+from fastapi import HTTPException
+from google.genai.errors import APIError as GoogleAPIError
 from llmai.shared.errors import BaseError as LLMAIBaseError
+from openai import APIError as OpenAIAPIError
+
+from enums.llm_provider import LLMProvider
 from utils.image_generation_error import openai_error_detail
 from utils.llm_provider import get_llm_provider
 from utils.provider_error_messages import safe_llm_provider_error_detail
-
 
 CHATGPT_AUTH_REQUIRED_HEADER = {"X-Presenton-Auth-Action": "codex-reauth"}
 CHATGPT_AUTH_REQUIRED_PREFIX = "CHATGPT_AUTH_REQUIRED:"
@@ -58,11 +58,7 @@ def handle_llm_client_exceptions(e: Exception) -> HTTPException:
             detail=detail,
         )
     if isinstance(e, GoogleAPIError):
-        status_code = (
-            getattr(e, "code", None)
-            or getattr(e, "status_code", None)
-            or 500
-        )
+        status_code = getattr(e, "code", None) or getattr(e, "status_code", None) or 500
         return HTTPException(
             status_code=500,
             detail=safe_llm_provider_error_detail(

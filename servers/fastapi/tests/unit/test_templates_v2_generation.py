@@ -171,9 +171,7 @@ def _generated_layout_with_images() -> dict:
 
 def _contains_key(value, key: str) -> bool:
     if isinstance(value, dict):
-        return key in value or any(
-            _contains_key(child, key) for child in value.values()
-        )
+        return key in value or any(_contains_key(child, key) for child in value.values())
     if isinstance(value, list):
         return any(_contains_key(item, key) for item in value)
     return False
@@ -247,10 +245,7 @@ def test_generate_slide_layout_requests_complete_layout(monkeypatch, caplog):
         "mode": "auto",
         "tools": ["previewSlide"],
     }
-    assert (
-        preview_call["response_format"].json_schema
-        == slide_layout_llm_json_schema()
-    )
+    assert preview_call["response_format"].json_schema == slide_layout_llm_json_schema()
     assert preview_call["response_format"].name == "SlideLayoutResponse"
     assert "max_tokens" not in preview_call
     assert preview_call["messages"][0].content == GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT
@@ -258,16 +253,11 @@ def test_generate_slide_layout_requests_complete_layout(monkeypatch, caplog):
     assert user_content[0].url == "https://example.com/slide-3.png"
     payload = json.loads(user_content[1])
     assert payload[0]["id"] == "source_slide"
-    assert payload[0]["elements"][0]["runs"][0]["text"] == (
-        "Original title"
-    )
+    assert payload[0]["elements"][0]["runs"][0]["text"] == ("Original title")
     assert not _contains_key(payload, "decorative")
 
     final_call = client.calls[1]
-    assert (
-        final_call["response_format"].json_schema
-        == slide_layout_llm_json_schema()
-    )
+    assert final_call["response_format"].json_schema == slide_layout_llm_json_schema()
     assert final_call["response_format"].name == "SlideLayoutResponse"
     assert "max_tokens" not in final_call
     assert isinstance(final_call["messages"][-2], ToolResponseMessage)
@@ -306,10 +296,7 @@ def test_generate_slide_layout_accepts_direct_schema_response(monkeypatch, caplo
         "mode": "auto",
         "tools": ["previewSlide"],
     }
-    assert (
-        call["response_format"].json_schema
-        == slide_layout_llm_json_schema()
-    )
+    assert call["response_format"].json_schema == slide_layout_llm_json_schema()
     assert call["response_format"].name == "SlideLayoutResponse"
     messages = [record.getMessage() for record in caplog.records]
     assert any("slide 1: slide layout JSON returned" in message for message in messages)
@@ -387,10 +374,7 @@ def test_generate_slide_layout_uses_json_schema_response_for_google(monkeypatch)
 
     assert result == SlideLayout.model_validate(_generated_layout())
     call = client.calls[0]
-    assert (
-        call["response_format"].json_schema
-        == slide_layout_llm_json_schema()
-    )
+    assert call["response_format"].json_schema == slide_layout_llm_json_schema()
     assert call["response_format"].name == "SlideLayoutResponse"
     assert call["messages"][0].content == GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT
 
@@ -401,9 +385,7 @@ def test_generate_preview_candidate_returns_last_preview_tool_json(monkeypatch, 
         name="previewSlide",
         arguments=json.dumps(_generated_layout()),
     )
-    client = _FakeClient(
-        responses=[_FakeResponse(None, tool_calls=[preview_tool_call])]
-    )
+    client = _FakeClient(responses=[_FakeResponse(None, tool_calls=[preview_tool_call])])
     render_calls = []
 
     def fake_render(_self, layout):
@@ -432,19 +414,12 @@ def test_generate_preview_candidate_returns_last_preview_tool_json(monkeypatch, 
     assert render_calls == ["title_slide"]
     assert len(client.calls) == 1
     call = client.calls[0]
-    assert (
-        call["response_format"].json_schema
-        == slide_layout_llm_json_schema()
-    )
+    assert call["response_format"].json_schema == slide_layout_llm_json_schema()
     assert "max_tokens" not in call
     messages = [record.getMessage() for record in caplog.records]
+    assert any("slide layout: preview slide rendered" in message for message in messages)
     assert any(
-        "slide layout: preview slide rendered" in message
-        for message in messages
-    )
-    assert any(
-        "slide layout: returning preview slide JSON as final" in message
-        for message in messages
+        "slide layout: returning preview slide JSON as final" in message for message in messages
     )
 
 
@@ -563,27 +538,18 @@ def test_generate_slide_layout_allows_second_preview_then_returns_final_json(
     messages = [record.getMessage() for record in caplog.records]
     assert any("slide 1: preview slide called" in message for message in messages)
     assert any("preview_call=2" in message for message in messages)
-    assert any(
-        "slide 1: slide layout JSON returned" in message
-        for message in messages
-    )
+    assert any("slide 1: slide layout JSON returned" in message for message in messages)
 
 
 def test_generate_template_generates_each_slide_and_preserves_order(monkeypatch):
-    raw_layouts = RawSlideLayouts(
-        layouts=[_raw_layout("first"), _raw_layout("second")]
-    )
+    raw_layouts = RawSlideLayouts(layouts=[_raw_layout("first"), _raw_layout("second")])
     calls = []
 
     def fake_generate(source_layout, slide_index, slide_image_url, fonts=None):
         calls.append((source_layout.id, slide_index, slide_image_url, fonts))
-        return SlideLayout.model_validate(
-            _generated_layout(f"generated_{source_layout.id}")
-        )
+        return SlideLayout.model_validate(_generated_layout(f"generated_{source_layout.id}"))
 
-    monkeypatch.setattr(
-        "templates.v2.generation.generate_slide_layout", fake_generate
-    )
+    monkeypatch.setattr("templates.v2.generation.generate_slide_layout", fake_generate)
 
     generated = generate_template(
         raw_layouts,
@@ -612,16 +578,12 @@ def test_generate_template_generates_each_slide_and_preserves_order(monkeypatch)
 
 
 def test_generate_template_repairs_duplicate_generated_layout_ids(monkeypatch):
-    raw_layouts = RawSlideLayouts(
-        layouts=[_raw_layout("first"), _raw_layout("second")]
-    )
+    raw_layouts = RawSlideLayouts(layouts=[_raw_layout("first"), _raw_layout("second")])
 
     def fake_generate(source_layout, slide_index, slide_image_url, fonts=None):
         return SlideLayout.model_validate(_generated_layout("duplicate_layout"))
 
-    monkeypatch.setattr(
-        "templates.v2.generation.generate_slide_layout", fake_generate
-    )
+    monkeypatch.setattr("templates.v2.generation.generate_slide_layout", fake_generate)
 
     generated = generate_template(
         raw_layouts,
@@ -647,9 +609,7 @@ def test_generate_template_requires_one_image_per_layout():
         )
 
 
-def test_merge_similar_components_clusters_by_global_component_index(
-    monkeypatch, caplog
-):
+def test_merge_similar_components_clusters_by_global_component_index(monkeypatch, caplog):
     first = _generated_layout("first_layout")
     first["components"][0]["id"] = "title_block"
     first["components"][0]["description"] = (
@@ -719,9 +679,7 @@ def test_merge_similar_components_clusters_by_global_component_index(
         "title_block",
         "section_heading",
     ]
-    assert [variant.id for variant in merged.components[1].variants] == [
-        "metric_grid"
-    ]
+    assert [variant.id for variant in merged.components[1].variants] == ["metric_grid"]
 
     call = client.calls[0]
     assert call["response_format"].json_schema.__name__ == "SimilarComponentsList"
@@ -733,23 +691,17 @@ def test_merge_similar_components_clusters_by_global_component_index(
             {
                 "index": 0,
                 "id": "title_block",
-                "description": (
-                    "Reusable prominent title text block for opening slides."
-                ),
+                "description": ("Reusable prominent title text block for opening slides."),
             },
             {
                 "index": 1,
                 "id": "metric_grid",
-                "description": (
-                    "Reusable grid presenting several business metrics and labels."
-                ),
+                "description": ("Reusable grid presenting several business metrics and labels."),
             },
             {
                 "index": 2,
                 "id": "section_heading",
-                "description": (
-                    "Reusable prominent heading text block for section slides."
-                ),
+                "description": ("Reusable prominent heading text block for section slides."),
             },
         ]
     }
@@ -777,9 +729,7 @@ def test_merge_similar_components_removes_structural_duplicates_after_clustering
 ):
     first = _generated_layout("first_layout")
     first["components"][0]["id"] = "headline_a"
-    first["components"][0]["description"] = (
-        "Reusable headline card with static divider decoration."
-    )
+    first["components"][0]["description"] = "Reusable headline card with static divider decoration."
     first["components"][0]["elements"] = [
         {
             "type": "vector",
@@ -942,9 +892,7 @@ def test_preview_slide_tool_renders_layout_components(tmp_path, monkeypatch):
     image = PreviewSlideTool(
         slide_index=2,
         fonts={"Inter": "https://example.com/inter.css"},
-    ).render(
-        SlideLayout.model_validate(_generated_layout())
-    )
+    ).render(SlideLayout.model_validate(_generated_layout()))
 
     saved_json_path = app_data_dir / "preview_slide" / "2" / "1.json"
     saved_image_path = app_data_dir / "preview_slide" / "2" / "1.png"
@@ -981,9 +929,7 @@ def test_direct_generation_prompt_uses_decorative_element_metadata():
     assert "Convert the provided raw slide elements to components" in (
         GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT
     )
-    assert "# Decorative and Content Element Rules:" in (
-        GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT
-    )
+    assert "# Decorative and Content Element Rules:" in (GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT)
     assert "`decorative=true`" in GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT
     assert "`decorative=false`" in GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT
     assert "fixed visual scaffolding" in GENERATE_SLIDE_LAYOUT_SYSTEM_PROMPT

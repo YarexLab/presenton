@@ -81,9 +81,7 @@ def _coerce_validation_error(payload: Any, fallback: str) -> LayoutCodeValidatio
     return LayoutCodeValidationError(
         str(payload.get("error") or fallback),
         line=payload.get("line") if isinstance(payload.get("line"), int) else None,
-        column=payload.get("column")
-        if isinstance(payload.get("column"), int)
-        else None,
+        column=payload.get("column") if isinstance(payload.get("column"), int) else None,
     )
 
 
@@ -110,16 +108,12 @@ async def validate_layout_code(layout_code: str) -> ValidatedLayoutCode:
                             layout_code=str(payload.get("layout_code") or ""),
                             layout_id=str(payload.get("layoutId") or ""),
                             layout_name=str(payload.get("layoutName") or ""),
-                            layout_description=str(
-                                payload.get("layoutDescription") or ""
-                            ),
+                            layout_description=str(payload.get("layoutDescription") or ""),
                             schema_json_value=payload.get("schemaJSON"),
                         )
 
                     if response.status == 400:
-                        raise _coerce_validation_error(
-                            payload, "Layout code validation failed"
-                        )
+                        raise _coerce_validation_error(payload, "Layout code validation failed")
 
                     last_service_error = (
                         f"Layout validation service returned HTTP {response.status}"

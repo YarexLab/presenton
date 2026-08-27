@@ -1,7 +1,7 @@
 import asyncio
 import re
 import xml.etree.ElementTree as ET
-from typing import Iterable
+from collections.abc import Iterable
 
 import aiohttp
 

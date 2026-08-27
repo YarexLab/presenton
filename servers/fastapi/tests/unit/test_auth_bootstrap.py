@@ -21,9 +21,7 @@ async def _create_auth_database(database_path):
     return engine, session_maker
 
 
-def test_reset_auth_recovers_admin_without_replacing_account(
-    monkeypatch, tmp_path
-):
+def test_reset_auth_recovers_admin_without_replacing_account(monkeypatch, tmp_path):
     config_path = tmp_path / "userConfig.json"
     config_path.write_text(
         json.dumps(
@@ -100,18 +98,14 @@ def test_reset_auth_recovers_admin_without_replacing_account(
     assert stat.S_IMODE((tmp_path / "userConfig.json.bak").stat().st_mode) == 0o600
 
 
-def test_reset_auth_without_password_refuses_to_delete_or_replace_admin(
-    monkeypatch, tmp_path
-):
+def test_reset_auth_without_password_refuses_to_delete_or_replace_admin(monkeypatch, tmp_path):
     monkeypatch.setenv("USER_CONFIG_PATH", str(tmp_path / "userConfig.json"))
     monkeypatch.setenv("RESET_AUTH", "true")
     monkeypatch.delenv("AUTH_PASSWORD", raising=False)
     monkeypatch.delenv("AUTH_OVERRIDE_FROM_ENV", raising=False)
 
     async def runner():
-        engine, session_maker = await _create_auth_database(
-            tmp_path / "missing-password.db"
-        )
+        engine, session_maker = await _create_auth_database(tmp_path / "missing-password.db")
         try:
             async with session_maker() as session:
                 admin = User(

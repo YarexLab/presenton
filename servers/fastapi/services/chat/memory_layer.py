@@ -18,14 +18,14 @@ from models.sql.key_value import KeyValueSqlModel
 from models.sql.presentation import PresentationModel
 from models.sql.slide import SlideModel
 from models.sql.template_v2 import TemplateV2
-from services.icon_finder_service import ICON_FINDER_SERVICE
 from services.documents_loader import DocumentsLoader
+from services.icon_finder_service import ICON_FINDER_SERVICE
 from services.image_generation_service import ImageGenerationService
 from services.mem0_presentation_memory_service import MEM0_PRESENTATION_MEMORY_SERVICE
 from services.temp_file_service import TEMP_FILE_SERVICE
 from templates.presentation_layout import PresentationLayoutModel, SlideLayoutModel
-from templates.v2.schema import get_template_schema
 from templates.v2.content import hydrate_repeated_top_level_groups
+from templates.v2.schema import get_template_schema
 from utils.asset_directory_utils import (
     filesystem_image_path_to_app_data_url,
     get_images_directory,
@@ -33,8 +33,8 @@ from utils.asset_directory_utils import (
 )
 from utils.icon_weights import DEFAULT_ICON_WEIGHT, extract_icon_type_from_settings
 from utils.latex_text import normalize_latex, replace_text_runs, text_runs_to_tagged_text
-from utils.outline_utils import get_presentation_title_from_presentation_outline
 from utils.outline_limits import normalize_outline_content
+from utils.outline_utils import get_presentation_title_from_presentation_outline
 from utils.process_slides import (
     process_old_and_new_slides_and_fetch_assets,
     process_slide_and_fetch_assets,
@@ -311,9 +311,7 @@ class PresentationChatMemoryLayer:
     ):
         self._sql_session = sql_session
         self._presentation_id = presentation_id
-        self.presentation_type = (
-            "smart" if presentation_type == "smart" else "standard"
-        )
+        self.presentation_type = "smart" if presentation_type == "smart" else "standard"
 
     async def get(self, key: str) -> Any:
         if key != "presentation_outline":
@@ -341,9 +339,7 @@ class PresentationChatMemoryLayer:
                         {
                             "slide_id": str(slide.id),
                             "index": slide.index,
-                            "content": self._html_to_text(
-                                slide.html_content or ""
-                            )[:1200],
+                            "content": self._html_to_text(slide.html_content or "")[:1200],
                             "has_html": bool((slide.html_content or "").strip()),
                         }
                         for slide in slides
@@ -646,8 +642,7 @@ class PresentationChatMemoryLayer:
             "saved": True,
             "action": "moved",
             "message": (
-                f"Outline slide moved from index {source_index} "
-                f"to index {destination_index}."
+                f"Outline slide moved from index {source_index} to index {destination_index}."
             ),
             "from_index": source_index,
             "to_index": destination_index,
@@ -655,9 +650,7 @@ class PresentationChatMemoryLayer:
         }
 
     async def get_available_layouts(self) -> list[dict[str, Any]]:
-        presentation = await self._sql_session.get(
-            PresentationModel, self._presentation_id
-        )
+        presentation = await self._sql_session.get(PresentationModel, self._presentation_id)
         layout_model = await self._get_layout_model(presentation)
         if not layout_model:
             return []
@@ -681,9 +674,7 @@ class PresentationChatMemoryLayer:
         include_full_content: bool = False,
         max_results: int = 20,
     ) -> dict[str, Any]:
-        presentation = await self._sql_session.get(
-            PresentationModel, self._presentation_id
-        )
+        presentation = await self._sql_session.get(PresentationModel, self._presentation_id)
         if not presentation:
             return {
                 "found": False,
@@ -705,9 +696,7 @@ class PresentationChatMemoryLayer:
             if layout_filter and candidate.get("layout_id") != layout_filter:
                 continue
             element_types = {
-                str(item).lower()
-                for item in candidate.get("element_types", [])
-                if item is not None
+                str(item).lower() for item in candidate.get("element_types", []) if item is not None
             }
             if element_filter and element_filter not in element_types:
                 continue
@@ -751,9 +740,7 @@ class PresentationChatMemoryLayer:
         query: str | None = None,
         max_chars: int | None = None,
     ) -> dict[str, Any]:
-        presentation = await self._sql_session.get(
-            PresentationModel, self._presentation_id
-        )
+        presentation = await self._sql_session.get(PresentationModel, self._presentation_id)
         if not presentation:
             return {
                 "found": False,
@@ -824,9 +811,8 @@ class PresentationChatMemoryLayer:
             }
 
         fallback_query = (
-            (query or "").strip()
-            or "uploaded source document extracted PDF document text summary"
-        )
+            query or ""
+        ).strip() or "uploaded source document extracted PDF document text summary"
         fallback_context = await MEM0_PRESENTATION_MEMORY_SERVICE.retrieve_context(
             self._presentation_id,
             fallback_query,
@@ -876,9 +862,7 @@ class PresentationChatMemoryLayer:
             "message": "No uploaded source documents are linked to this presentation.",
         }
 
-    async def get_content_schema_from_layout_id(
-        self, layout_id: str
-    ) -> dict[str, Any] | None:
+    async def get_content_schema_from_layout_id(self, layout_id: str) -> dict[str, Any] | None:
         layout = await self._get_layout_by_id(layout_id)
         if not layout:
             return None
@@ -888,9 +872,7 @@ class PresentationChatMemoryLayer:
         self, presentation: PresentationModel | None = None
     ) -> str:
         if presentation is None:
-            presentation = await self._sql_session.get(
-                PresentationModel, self._presentation_id
-            )
+            presentation = await self._sql_session.get(PresentationModel, self._presentation_id)
         layout_model = await self._get_layout_model(presentation)
         return layout_model.icon_weight if layout_model else DEFAULT_ICON_WEIGHT
 
@@ -933,11 +915,7 @@ class PresentationChatMemoryLayer:
                 "slide_count": len(slides),
                 "max_slide_count": MAX_NUMBER_OF_SLIDES,
             }
-        insert_index = (
-            len(slides)
-            if index is None
-            else min(max(0, index), len(slides))
-        )
+        insert_index = len(slides) if index is None else min(max(0, index), len(slides))
         for slide in sorted(
             [slide for slide in slides if slide.index >= insert_index],
             key=lambda each: each.index,
@@ -1184,9 +1162,7 @@ class PresentationChatMemoryLayer:
             }
             if include_slide_html:
                 row["html"] = (
-                    html[:max_html_chars_per_slide]
-                    if max_html_chars_per_slide > 0
-                    else html
+                    html[:max_html_chars_per_slide] if max_html_chars_per_slide > 0 else html
                 )
             slide_rows.append(row)
 
@@ -1216,6 +1192,7 @@ class PresentationChatMemoryLayer:
         speaker_note: str | None = None,
     ) -> dict[str, Any]:
         from fastapi import HTTPException
+
         from utils.llm_calls.generate_smart_presentation import (
             normalize_smart_slide_html,
         )
@@ -1289,8 +1266,7 @@ class PresentationChatMemoryLayer:
             return {
                 "saved": False,
                 "message": (
-                    "Slide limit reached. You can have at most "
-                    f"{MAX_NUMBER_OF_SLIDES} slides."
+                    f"Slide limit reached. You can have at most {MAX_NUMBER_OF_SLIDES} slides."
                 ),
                 "validation_errors": [],
             }
@@ -1399,9 +1375,7 @@ class PresentationChatMemoryLayer:
 
         await self._sql_session.delete(slide)
 
-        remaining_slides = [
-            each_slide for each_slide in slides if each_slide.id != slide.id
-        ]
+        remaining_slides = [each_slide for each_slide in slides if each_slide.id != slide.id]
         shifted_count = 0
         for each_slide in remaining_slides:
             if each_slide.index <= target_index:
@@ -1455,9 +1429,7 @@ class PresentationChatMemoryLayer:
         index: int,
     ) -> SlideModel:
         layout_group = (
-            source_slide.layout_group.strip()
-            if isinstance(source_slide.layout_group, str)
-            else ""
+            source_slide.layout_group.strip() if isinstance(source_slide.layout_group, str) else ""
         )
         if not layout_group and presentation:
             layout_group = self._resolve_layout_group(presentation=presentation)
@@ -1578,14 +1550,14 @@ class PresentationChatMemoryLayer:
             _normalize_chart_element,
             _resolve_element_path,
             _resolve_image_update_payload,
-            _validate_current_element_model,
             _update_chart_element,
             _update_infographic_element,
-            _update_table_element,
             _update_table_cell,
+            _update_table_element,
             _update_text_element,
             _update_text_list_element,
             _update_vector_element,
+            _validate_current_element_model,
         )
 
         slide = await self._get_slide_by_index(index)
@@ -1668,9 +1640,7 @@ class PresentationChatMemoryLayer:
             _update_vector_element(element, vector)
         elif content_update_requested and element_type == "infographic":
             if infographic is None:
-                raise ValueError(
-                    "infographic is required for infographic content updates."
-                )
+                raise ValueError("infographic is required for infographic content updates.")
             _update_infographic_element(element, infographic)
         elif content_update_requested and element_type == "image":
             payload = _resolve_image_update_payload(text, items)
@@ -1712,9 +1682,7 @@ class PresentationChatMemoryLayer:
             "element_type": element_type,
             "position": element.get("position"),
             "size": element.get("size"),
-            "message": (
-                f"Updated {element_type} content on slide {slide.index + 1}."
-            ),
+            "message": (f"Updated {element_type} content on slide {slide.index + 1}."),
         }
 
     async def update_slide_ui_component(
@@ -1914,17 +1882,14 @@ class PresentationChatMemoryLayer:
         if missing_ids:
             raise ValueError(f"Component(s) not found: {', '.join(missing_ids)}")
 
-        boxes = [
-            self._component_box(component)
-            for _, component in selected
-        ]
+        boxes = [self._component_box(component) for _, component in selected]
         if any(box is None for box in boxes):
             raise ValueError("Cannot group components without valid derived bounds.")
         typed_boxes = [box for box in boxes if box is not None]
         left = min(box["x"] for box in typed_boxes)
         top = min(box["y"] for box in typed_boxes)
-        right = max(box["x"] + box["width"] for box in typed_boxes)
-        bottom = max(box["y"] + box["height"] for box in typed_boxes)
+        max(box["x"] + box["width"] for box in typed_boxes)
+        max(box["y"] + box["height"] for box in typed_boxes)
 
         grouped_elements: list[dict[str, Any]] = []
         for (_, component), box in zip(selected, typed_boxes):
@@ -1953,11 +1918,10 @@ class PresentationChatMemoryLayer:
 
         first_index = min(idx for idx, _ in selected)
         selected_indices = {idx for idx, _ in selected}
-        group_id = self._unique_ui_component_id(component_id or "group", [
-            component
-            for idx, component in enumerate(components)
-            if idx not in selected_indices
-        ])
+        group_id = self._unique_ui_component_id(
+            component_id or "group",
+            [component for idx, component in enumerate(components) if idx not in selected_indices],
+        )
         group_component = {
             "id": group_id,
             "description": "Grouped component",
@@ -1966,9 +1930,7 @@ class PresentationChatMemoryLayer:
         }
 
         next_components = [
-            component
-            for idx, component in enumerate(components)
-            if idx not in selected_indices
+            component for idx, component in enumerate(components) if idx not in selected_indices
         ]
         next_components.insert(first_index, group_component)
         ui["components"] = next_components
@@ -2117,10 +2079,7 @@ class PresentationChatMemoryLayer:
             return None
         width = content_size.get("width")
         height = content_size.get("height")
-        if not all(
-            isinstance(value, (int, float))
-            for value in (x, y, width, height)
-        ):
+        if not all(isinstance(value, (int, float)) for value in (x, y, width, height)):
             return None
         if width <= 0 or height <= 0:
             return None
@@ -2360,9 +2319,7 @@ class PresentationChatMemoryLayer:
             if isinstance(child_value, (dict, list)):
                 cls._scale_font_metrics_for_component_resize(child_value, scale)
 
-    async def delete_slide_ui_component(
-        self, *, index: int, component_id: str
-    ) -> dict[str, Any]:
+    async def delete_slide_ui_component(self, *, index: int, component_id: str) -> dict[str, Any]:
         slide = await self._get_slide_by_index(index)
         if not slide:
             return {"deleted": False, "message": f"No slide found at index {max(0, index)}."}
@@ -2379,9 +2336,7 @@ class PresentationChatMemoryLayer:
         ui["components"] = [
             component
             for component in components
-            if not (
-                isinstance(component, dict) and component.get("id") == component_id
-            )
+            if not (isinstance(component, dict) and component.get("id") == component_id)
         ]
         if len(ui["components"]) == before:
             return {
@@ -2395,14 +2350,10 @@ class PresentationChatMemoryLayer:
             "index": slide.index,
             "slide_number": slide.index + 1,
             "component_id": component_id,
-            "message": (
-                f"Deleted component '{component_id}' from slide {slide.index + 1}."
-            ),
+            "message": (f"Deleted component '{component_id}' from slide {slide.index + 1}."),
         }
 
-    async def delete_slide_ui_element(
-        self, *, index: int, element_path: str
-    ) -> dict[str, Any]:
+    async def delete_slide_ui_element(self, *, index: int, element_path: str) -> dict[str, Any]:
         from services.chat.slide_ui_helpers import _component_id_for_path
 
         slide = await self._get_slide_by_index(index)
@@ -2485,9 +2436,7 @@ class PresentationChatMemoryLayer:
                 candidate = f"{base}_{suffix}"
             new_id = candidate
         new_component["id"] = new_id
-        new_component.setdefault(
-            "description", f"Component {new_id} added via assistant."
-        )
+        new_component.setdefault("description", f"Component {new_id} added via assistant.")
         # Keep assistant-authored text content in the canonical renderable shape.
         self._sync_ui_text_fields(new_component)
         self._normalize_added_visual_block(new_component)
@@ -2495,9 +2444,7 @@ class PresentationChatMemoryLayer:
         self._fit_component_to_stage(new_component)
 
         position = (
-            len(components)
-            if insert_index is None
-            else min(max(0, insert_index), len(components))
+            len(components) if insert_index is None else min(max(0, insert_index), len(components))
         )
         components.insert(position, new_component)
 
@@ -2508,9 +2455,7 @@ class PresentationChatMemoryLayer:
             "slide_number": slide.index + 1,
             "component_id": new_id,
             "component_index": position,
-            "message": (
-                f"Added component '{new_id}' to slide {slide.index + 1}."
-            ),
+            "message": (f"Added component '{new_id}' to slide {slide.index + 1}."),
         }
 
     async def add_slide_ui_element(
@@ -2561,11 +2506,15 @@ class PresentationChatMemoryLayer:
             elements = component.setdefault("elements", [])
             if not isinstance(elements, list):
                 raise ValueError("Target component has no elements list.")
-            position = len(elements) if insert_index is None else min(max(0, insert_index), len(elements))
+            position = (
+                len(elements) if insert_index is None else min(max(0, insert_index), len(elements))
+            )
             elements.insert(position, new_element)
             path = f"components[{component_index}].elements[{position}]"
         else:
-            position_box = new_element.get("position") if isinstance(new_element.get("position"), dict) else {}
+            position_box = (
+                new_element.get("position") if isinstance(new_element.get("position"), dict) else {}
+            )
             size_box = new_element.get("size") if isinstance(new_element.get("size"), dict) else {}
             is_vector = str(new_element.get("type") or "").lower() == "vector"
             vector_box = self._vector_element_box(new_element) if is_vector else None
@@ -2618,7 +2567,11 @@ class PresentationChatMemoryLayer:
                 }
             self._normalize_added_visual_block(component)
             self._fit_component_to_stage(component)
-            component_position = len(components) if insert_index is None else min(max(0, insert_index), len(components))
+            component_position = (
+                len(components)
+                if insert_index is None
+                else min(max(0, insert_index), len(components))
+            )
             components.insert(component_position, component)
             component_id = str(component["id"])
             path = f"components[{component_position}].elements[0]"
@@ -2668,10 +2621,7 @@ class PresentationChatMemoryLayer:
                 runs = node.get("runs")
                 if isinstance(runs, list) and runs:
                     joined = text_runs_to_tagged_text(runs)
-                    if any(
-                        isinstance(run, dict) and run.get("type") == "latex"
-                        for run in runs
-                    ):
+                    if any(isinstance(run, dict) and run.get("type") == "latex" for run in runs):
                         node.pop("text", None)
                     else:
                         node["text"] = joined
@@ -2731,8 +2681,7 @@ class PresentationChatMemoryLayer:
             )
             alias_text = PresentationChatMemoryLayer._table_cell_alias_text(normalized)
             if normalized_runs and (
-                PresentationChatMemoryLayer._runs_content_text(normalized_runs)
-                or not alias_text
+                PresentationChatMemoryLayer._runs_content_text(normalized_runs) or not alias_text
             ):
                 normalized["runs"] = normalized_runs
             else:
@@ -2777,9 +2726,7 @@ class PresentationChatMemoryLayer:
                     )
                 normalized.append(next_run)
             else:
-                next_run = {
-                    "text": PresentationChatMemoryLayer._table_cell_text_value(run)
-                }
+                next_run = {"text": PresentationChatMemoryLayer._table_cell_text_value(run)}
                 if isinstance(fallback_font, dict):
                     next_run["font"] = copy.deepcopy(fallback_font)
                 normalized.append(next_run)
@@ -2804,8 +2751,7 @@ class PresentationChatMemoryLayer:
             return str(value)
         if isinstance(value, list):
             return "".join(
-                PresentationChatMemoryLayer._table_cell_text_value(item)
-                for item in value
+                PresentationChatMemoryLayer._table_cell_text_value(item) for item in value
             )
         if isinstance(value, dict):
             runs = value.get("runs")
@@ -2875,11 +2821,7 @@ class PresentationChatMemoryLayer:
         elements = component.get("elements")
         if not isinstance(elements, list):
             return None
-        types = {
-            element.get("type")
-            for element in elements
-            if isinstance(element, dict)
-        }
+        types = {element.get("type") for element in elements if isinstance(element, dict)}
         if "chart" in types:
             return "chart"
         if "table" in types:
@@ -2912,9 +2854,7 @@ class PresentationChatMemoryLayer:
         parent: Any = ui
         for segment in segments[:-1]:
             if segment == "child":
-                if not isinstance(parent, dict) or not isinstance(
-                    parent.get("child"), dict
-                ):
+                if not isinstance(parent, dict) or not isinstance(parent.get("child"), dict):
                     return False
                 parent = parent["child"]
                 continue
@@ -2977,9 +2917,7 @@ class PresentationChatMemoryLayer:
         if size is not None and isinstance(target.get("corner_radii"), list):
             radius_scale = min(abs(scale_x), abs(scale_y))
             target["corner_radii"] = [
-                float(value) * radius_scale
-                if isinstance(value, (int, float))
-                else value
+                float(value) * radius_scale if isinstance(value, (int, float)) else value
                 for value in target["corner_radii"]
             ]
         target.pop("position", None)
@@ -3030,9 +2968,7 @@ class PresentationChatMemoryLayer:
                 "message": "Presentation not found.",
             }
 
-        current_theme = (
-            presentation.theme if isinstance(presentation.theme, dict) else None
-        )
+        current_theme = presentation.theme if isinstance(presentation.theme, dict) else None
         available_themes = await self._get_chat_available_themes()
         selected_theme: dict[str, Any] | None = None
         custom_theme_saved = False
@@ -3114,14 +3050,10 @@ class PresentationChatMemoryLayer:
             }
 
         current_theme = (
-            copy.deepcopy(presentation.theme)
-            if isinstance(presentation.theme, dict)
-            else None
+            copy.deepcopy(presentation.theme) if isinstance(presentation.theme, dict) else None
         )
         current_theme_id = (
-            str((current_theme or {}).get("id") or "").strip().lower()
-            if current_theme
-            else ""
+            str((current_theme or {}).get("id") or "").strip().lower() if current_theme else ""
         )
         builtin_theme_ids = {
             str(theme.get("id") or "").strip().lower() for theme in CHAT_BUILTIN_THEMES
@@ -3141,9 +3073,7 @@ class PresentationChatMemoryLayer:
                     "name": theme_name or theme_id,
                     "description": str(theme.get("description") or "").strip(),
                     "source": (
-                        "built_in"
-                        if normalized_theme_id in builtin_theme_ids
-                        else "custom"
+                        "built_in" if normalized_theme_id in builtin_theme_ids else "custom"
                     ),
                     "is_current": bool(
                         current_theme_id
@@ -3267,9 +3197,7 @@ class PresentationChatMemoryLayer:
                 if not isinstance(component, dict):
                     continue
                 component_id = str(
-                    component.get("id")
-                    or group.get("id")
-                    or f"component_{group_index + 1}"
+                    component.get("id") or group.get("id") or f"component_{group_index + 1}"
                 )
                 block_id = cls._unique_block_id(
                     f"merged:{group.get('id') or component_id}:{variant_index}",
@@ -3284,9 +3212,7 @@ class PresentationChatMemoryLayer:
                         component=component,
                         component_id=component_id,
                         description=(
-                            group.get("description")
-                            or component.get("description")
-                            or ""
+                            group.get("description") or component.get("description") or ""
                         ),
                         variant_index=variant_index,
                         variant_count=variant_count,
@@ -3315,16 +3241,12 @@ class PresentationChatMemoryLayer:
                 continue
             layout_id = str(layout.get("id") or f"layout_{layout_index + 1}")
             layout_description = (
-                str(layout.get("description"))
-                if layout.get("description") is not None
-                else None
+                str(layout.get("description")) if layout.get("description") is not None else None
             )
             for component_index, component in enumerate(components):
                 if not isinstance(component, dict):
                     continue
-                component_id = str(
-                    component.get("id") or f"component_{component_index + 1}"
-                )
+                component_id = str(component.get("id") or f"component_{component_index + 1}")
                 block_id = cls._unique_block_id(
                     f"layout:{layout_id}:{component_id}",
                     seen_block_ids,
@@ -3441,8 +3363,7 @@ class PresentationChatMemoryLayer:
         if not isinstance(elements, list) or not elements:
             return False
         return all(
-            isinstance(element, dict) and element.get("decorative") is True
-            for element in elements
+            isinstance(element, dict) and element.get("decorative") is True for element in elements
         )
 
     @staticmethod
@@ -3514,9 +3435,7 @@ class PresentationChatMemoryLayer:
         presentation: PresentationModel | None = None,
     ) -> SlideLayoutModel | None:
         if not presentation:
-            presentation = await self._sql_session.get(
-                PresentationModel, self._presentation_id
-            )
+            presentation = await self._sql_session.get(PresentationModel, self._presentation_id)
         layout_model = await self._get_layout_model(presentation)
         if not layout_model:
             return None
@@ -3582,10 +3501,7 @@ class PresentationChatMemoryLayer:
 
     @staticmethod
     def _is_template_layout_payload(layout_payload: Any) -> bool:
-        return (
-            isinstance(layout_payload, dict)
-            and isinstance(layout_payload.get("layouts"), list)
-        )
+        return isinstance(layout_payload, dict) and isinstance(layout_payload.get("layouts"), list)
 
     @staticmethod
     def _extract_template_id(value: Any) -> str | None:
@@ -3617,14 +3533,11 @@ class PresentationChatMemoryLayer:
 
             source_layout = (
                 source_layouts[index]
-                if index < len(source_layouts)
-                and isinstance(source_layouts[index], dict)
+                if index < len(source_layouts) and isinstance(source_layouts[index], dict)
                 else {}
             )
             layout_id = (
-                schema_layout.get("layout_id")
-                or source_layout.get("id")
-                or f"layout_{index + 1}"
+                schema_layout.get("layout_id") or source_layout.get("id") or f"layout_{index + 1}"
             )
             layout_schema = schema_layout.get("schema")
             if not isinstance(layout_schema, dict):
@@ -3726,9 +3639,7 @@ class PresentationChatMemoryLayer:
         for component in components:
             if isinstance(component, dict):
                 component_id = str(component.get("id") or "")
-                component_counts[component_id] = (
-                    component_counts.get(component_id, 0) + 1
-                )
+                component_counts[component_id] = component_counts.get(component_id, 0) + 1
 
         component_seen: dict[str, int] = {}
         used_keys: set[str] = set()
@@ -3855,11 +3766,7 @@ class PresentationChatMemoryLayer:
 
         nested_content = value if isinstance(value, dict) else content_values
         nested_direct_value = direct_value and not has_value
-        nested_name_occurrences = (
-            {}
-            if has_value and isinstance(value, dict)
-            else name_occurrences
-        )
+        nested_name_occurrences = {} if has_value and isinstance(value, dict) else name_occurrences
 
         child = element.get("child")
         if isinstance(child, dict):
@@ -3906,9 +3813,7 @@ class PresentationChatMemoryLayer:
         direct_value: bool = False,
         name_occurrences: dict[str, int] | None = None,
     ) -> None:
-        scoped_name_occurrences = (
-            name_occurrences if name_occurrences is not None else {}
-        )
+        scoped_name_occurrences = name_occurrences if name_occurrences is not None else {}
         for element in elements:
             if not isinstance(element, dict):
                 continue
@@ -4002,9 +3907,7 @@ class PresentationChatMemoryLayer:
             return
 
         if element_type == "text-list" and isinstance(value, list):
-            source_items = (
-                element.get("items") if isinstance(element.get("items"), list) else []
-            )
+            source_items = element.get("items") if isinstance(element.get("items"), list) else []
             element["items"] = [
                 cls._replacement_runs_from_existing(
                     source_items[index] if index < len(source_items) else None,
@@ -4066,9 +3969,7 @@ class PresentationChatMemoryLayer:
         colors = value.get("colors")
         if isinstance(colors, list):
             element["colors"] = [
-                color
-                for color in colors
-                if isinstance(color, str) and color.strip()
+                color for color in colors if isinstance(color, str) and color.strip()
             ]
 
     @classmethod
@@ -4153,9 +4054,7 @@ class PresentationChatMemoryLayer:
         columns = value.get("columns")
         if isinstance(columns, list):
             existing_columns = (
-                element.get("columns")
-                if isinstance(element.get("columns"), list)
-                else []
+                element.get("columns") if isinstance(element.get("columns"), list) else []
             )
             element["columns"] = cls._template_table_cells_from_values(
                 existing_columns,
@@ -4177,16 +4076,8 @@ class PresentationChatMemoryLayer:
         fallback_cell = existing_cells[-1] if existing_cells else None
         cells: list[dict[str, Any]] = []
         for index, value in enumerate(values):
-            existing_cell = (
-                existing_cells[index]
-                if index < len(existing_cells)
-                else fallback_cell
-            )
-            existing_runs = (
-                existing_cell.get("runs")
-                if isinstance(existing_cell, dict)
-                else None
-            )
+            existing_cell = existing_cells[index] if index < len(existing_cells) else fallback_cell
+            existing_runs = existing_cell.get("runs") if isinstance(existing_cell, dict) else None
             cell = copy.deepcopy(existing_cell) if isinstance(existing_cell, dict) else {}
             cell["runs"] = cls._replacement_runs_from_existing(
                 existing_runs,
@@ -4202,17 +4093,14 @@ class PresentationChatMemoryLayer:
         element: dict[str, Any],
         rows: list[Any],
     ) -> None:
-        existing_rows = (
-            element.get("rows") if isinstance(element.get("rows"), list) else []
-        )
+        existing_rows = element.get("rows") if isinstance(element.get("rows"), list) else []
         next_rows: list[list[dict[str, Any]]] = []
         for row_index, row in enumerate(rows):
             if not isinstance(row, list):
                 continue
             existing_row = (
                 existing_rows[row_index]
-                if row_index < len(existing_rows)
-                and isinstance(existing_rows[row_index], list)
+                if row_index < len(existing_rows) and isinstance(existing_rows[row_index], list)
                 else []
             )
             next_rows.append(
@@ -4250,15 +4138,11 @@ class PresentationChatMemoryLayer:
             for key, nested_value in value.items():
                 if key in RUNTIME_CONTENT_FIELDS:
                     continue
-                sanitized[key] = PresentationChatMemoryLayer._strip_runtime_fields(
-                    nested_value
-                )
+                sanitized[key] = PresentationChatMemoryLayer._strip_runtime_fields(nested_value)
             return sanitized
 
         if isinstance(value, list):
-            return [
-                PresentationChatMemoryLayer._strip_runtime_fields(item) for item in value
-            ]
+            return [PresentationChatMemoryLayer._strip_runtime_fields(item) for item in value]
 
         return value
 
@@ -4279,9 +4163,7 @@ class PresentationChatMemoryLayer:
             name = str(presentation.layout.get("name") or "").strip()
             if name:
                 return name
-            if PresentationChatMemoryLayer._is_template_layout_payload(
-                presentation.layout
-            ):
+            if PresentationChatMemoryLayer._is_template_layout_payload(presentation.layout):
                 return "template"
         return fallback
 
@@ -4326,9 +4208,7 @@ class PresentationChatMemoryLayer:
         )
         presentation.outlines = outline_model.model_dump(mode="json")
         presentation.n_slides = len(outline_model.slides)
-        presentation.title = get_presentation_title_from_presentation_outline(
-            outline_model
-        )
+        presentation.title = get_presentation_title_from_presentation_outline(outline_model)
 
         self._sql_session.add(presentation)
         await self._sql_session.commit()
@@ -4365,7 +4245,9 @@ class PresentationChatMemoryLayer:
             content_text = str(slide.content)
 
         speaker_note = slide.speaker_note or ""
-        return f"slide_index={slide.index}\nlayout_id={slide.layout}\n{content_text}\n{speaker_note}"
+        return (
+            f"slide_index={slide.index}\nlayout_id={slide.layout}\n{content_text}\n{speaker_note}"
+        )
 
     @staticmethod
     def _html_to_text(html: str) -> str:
@@ -4398,9 +4280,7 @@ class PresentationChatMemoryLayer:
             flags=re.IGNORECASE | re.DOTALL,
         )
         if heading_match:
-            title = PresentationChatMemoryLayer._html_to_text(
-                heading_match.group(1)
-            ).strip()
+            title = PresentationChatMemoryLayer._html_to_text(heading_match.group(1)).strip()
             if title:
                 return title[:200]
         return f"Slide {index + 1}"
@@ -4461,7 +4341,9 @@ class PresentationChatMemoryLayer:
         return fallback_palette
 
     async def _get_chat_available_themes(self) -> list[dict[str, Any]]:
-        merged_themes: list[dict[str, Any]] = [copy.deepcopy(theme) for theme in CHAT_BUILTIN_THEMES]
+        merged_themes: list[dict[str, Any]] = [
+            copy.deepcopy(theme) for theme in CHAT_BUILTIN_THEMES
+        ]
         row = await self._sql_session.scalar(
             select(KeyValueSqlModel).where(KeyValueSqlModel.key == THEMES_STORAGE_KEY)
         )
@@ -4472,9 +4354,7 @@ class PresentationChatMemoryLayer:
         if not isinstance(custom_themes, list):
             return merged_themes
 
-        existing_ids = {
-            str(theme.get("id") or "").strip().lower() for theme in merged_themes
-        }
+        existing_ids = {str(theme.get("id") or "").strip().lower() for theme in merged_themes}
         for custom_theme in custom_themes:
             if not isinstance(custom_theme, dict):
                 continue
@@ -4620,9 +4500,7 @@ class PresentationChatMemoryLayer:
             ),
             "Custom Theme",
         )
-        theme_id = PresentationChatMemoryLayer._sanitize_theme_id(
-            str(payload.get("id") or "")
-        )
+        theme_id = PresentationChatMemoryLayer._sanitize_theme_id(str(payload.get("id") or ""))
         if not theme_id:
             theme_id = PresentationChatMemoryLayer._sanitize_theme_id(theme_name)
         if not theme_id:
@@ -4776,13 +4654,9 @@ class PresentationChatMemoryLayer:
         current_theme_id = str((current_theme or {}).get("id") or "").strip().lower()
         query_tokens = [token for token in re.split(r"[\s_-]+", normalized_query) if token]
 
-        if "dark" in query_tokens or any(
-            token in normalized_query for token in ("night", "black")
-        ):
+        if "dark" in query_tokens or any(token in normalized_query for token in ("night", "black")):
             for preferred in ("professional-dark", "edge-yellow"):
-                theme = PresentationChatMemoryLayer._find_theme_by_id(
-                    available_themes, preferred
-                )
+                theme = PresentationChatMemoryLayer._find_theme_by_id(available_themes, preferred)
                 if theme:
                     return theme
 
@@ -4790,9 +4664,7 @@ class PresentationChatMemoryLayer:
             token in normalized_query for token in ("bright", "white")
         ):
             for preferred in ("professional-blue", "mint-blue", "light-rose"):
-                theme = PresentationChatMemoryLayer._find_theme_by_id(
-                    available_themes, preferred
-                )
+                theme = PresentationChatMemoryLayer._find_theme_by_id(available_themes, preferred)
                 if theme:
                     return theme
 
@@ -4830,9 +4702,7 @@ class PresentationChatMemoryLayer:
         return None
 
     @staticmethod
-    def _find_theme_by_id(
-        themes: list[dict[str, Any]], theme_id: str
-    ) -> dict[str, Any] | None:
+    def _find_theme_by_id(themes: list[dict[str, Any]], theme_id: str) -> dict[str, Any] | None:
         normalized_theme_id = theme_id.strip().lower()
         for theme in themes:
             current_id = str(theme.get("id") or "").strip().lower()

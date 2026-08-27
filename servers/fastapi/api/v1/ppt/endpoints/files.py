@@ -1,19 +1,20 @@
 import os
-from typing import Annotated, List, Optional
+import uuid
+from typing import Annotated
+
 from fastapi import APIRouter, Body, File, HTTPException, UploadFile
 
 from constants.documents import UPLOAD_ACCEPTED_FILE_TYPES
 from models.decomposed_file_info import DecomposedFileInfo
-from services.temp_file_service import TEMP_FILE_SERVICE
 from services.documents_loader import DocumentsLoader
-import uuid
+from services.temp_file_service import TEMP_FILE_SERVICE
 from utils.validators import validate_files
 
 FILES_ROUTER = APIRouter(prefix="/files", tags=["Files"])
 
 
-@FILES_ROUTER.post("/upload", response_model=List[str])
-async def upload_files(files: Optional[List[UploadFile]]):
+@FILES_ROUTER.post("/upload", response_model=list[str])
+async def upload_files(files: list[UploadFile] | None):
     if not files:
         raise HTTPException(400, "Documents are required")
 
@@ -21,12 +22,10 @@ async def upload_files(files: Optional[List[UploadFile]]):
 
     validate_files(files, True, True, 100, UPLOAD_ACCEPTED_FILE_TYPES)
 
-    temp_files: List[str] = []
+    temp_files: list[str] = []
     if files:
         for each_file in files:
-            temp_path = TEMP_FILE_SERVICE.create_temp_file_path(
-                each_file.filename, temp_dir
-            )
+            temp_path = TEMP_FILE_SERVICE.create_temp_file_path(each_file.filename, temp_dir)
             with open(temp_path, "wb") as f:
                 content = await each_file.read()
                 f.write(content)
@@ -36,10 +35,10 @@ async def upload_files(files: Optional[List[UploadFile]]):
     return temp_files
 
 
-@FILES_ROUTER.post("/decompose", response_model=List[DecomposedFileInfo])
+@FILES_ROUTER.post("/decompose", response_model=list[DecomposedFileInfo])
 async def decompose_files(
-    file_paths: Annotated[List[str], Body(embed=True)],
-    language: Annotated[Optional[str], Body()] = None,
+    file_paths: Annotated[list[str], Body(embed=True)],
+    language: Annotated[str | None, Body()] = None,
 ):
     temp_dir = TEMP_FILE_SERVICE.create_temp_dir(str(uuid.uuid4()))
     resolved_file_paths = TEMP_FILE_SERVICE.resolve_existing_temp_paths(file_paths)
@@ -58,23 +57,17 @@ async def decompose_files(
 
     response = []
     for index, parsed_doc in enumerate(parsed_documents):
-        file_path = TEMP_FILE_SERVICE.create_temp_file_path(
-            f"{uuid.uuid4()}.txt", temp_dir
-        )
+        file_path = TEMP_FILE_SERVICE.create_temp_file_path(f"{uuid.uuid4()}.txt", temp_dir)
         parsed_doc = parsed_doc.replace("<br>", "\n")
         with open(file_path, "w", encoding="utf-8") as text_file:
             text_file.write(parsed_doc)
         response.append(
-            DecomposedFileInfo(
-                name=os.path.basename(other_files[index]), file_path=file_path
-            )
+            DecomposedFileInfo(name=os.path.basename(other_files[index]), file_path=file_path)
         )
 
     # Return the txt documents as it is
     for each_file in txt_files:
-        response.append(
-            DecomposedFileInfo(name=os.path.basename(each_file), file_path=each_file)
-        )
+        response.append(DecomposedFileInfo(name=os.path.basename(each_file), file_path=each_file))
 
     return response
 

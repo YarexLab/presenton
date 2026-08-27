@@ -1,6 +1,5 @@
 import datetime
 import uuid
-from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, Integer, String, Uuid, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -18,15 +17,9 @@ class User(UserBase):
 
     __tablename__ = "user"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, primary_key=True, default=uuid.uuid4
-    )
-    username: Mapped[str] = mapped_column(
-        String(128), unique=True, index=True, nullable=False
-    )
-    admin_slot: Mapped[Optional[str]] = mapped_column(
-        String(32), unique=True, nullable=True
-    )
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    username: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
+    admin_slot: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True)
     hashed_password: Mapped[str] = mapped_column(String(1024), nullable=False)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
@@ -37,7 +30,7 @@ class User(UserBase):
     is_verified: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )
-    created_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+    created_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=get_current_utc_datetime
     )
     auth_version: Mapped[int] = mapped_column(

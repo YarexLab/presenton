@@ -3,7 +3,6 @@ from typing import Any
 
 from constants.presentation import MAX_OUTLINE_CONTENT_WORDS
 
-
 OUTLINE_WORD_PATTERN = re.compile(r"\S+")
 
 

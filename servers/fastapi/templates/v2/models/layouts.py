@@ -28,7 +28,7 @@ class SimilarComponents(BaseModel):
     indices: list[int] = Field(min_length=2)
 
     @model_validator(mode="after")
-    def _indices_must_be_unique_and_non_negative(self) -> "SimilarComponents":
+    def _indices_must_be_unique_and_non_negative(self) -> SimilarComponents:
         if any(index < 0 for index in self.indices):
             raise ValueError("similar component indices must be non-negative")
         if len(self.indices) != len(set(self.indices)):
@@ -52,7 +52,7 @@ class MergedComponents(BaseModel):
     components: list[MergedComponent]
 
     @model_validator(mode="after")
-    def _component_ids_must_be_unique(self) -> "MergedComponents":
+    def _component_ids_must_be_unique(self) -> MergedComponents:
         ids = [component.id for component in self.components]
         if len(ids) != len(set(ids)):
             raise ValueError("merged component ids must be unique")
@@ -65,7 +65,7 @@ class SlideLayout(BaseModel):
     components: list[Component]
 
     @model_validator(mode="after")
-    def _component_ids_must_be_unique(self) -> "SlideLayout":
+    def _component_ids_must_be_unique(self) -> SlideLayout:
         ids = [component.id for component in self.components]
         if len(ids) != len(set(ids)):
             raise ValueError("component ids must be unique within a slide layout")
@@ -76,7 +76,7 @@ class SlideLayouts(BaseModel):
     layouts: list[SlideLayout] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def _layout_ids_must_be_unique(self) -> "SlideLayouts":
+    def _layout_ids_must_be_unique(self) -> SlideLayouts:
         ids = [layout.id for layout in self.layouts]
         if len(ids) != len(set(ids)):
             raise ValueError("slide layout ids must be unique")

@@ -35,8 +35,7 @@ class NonStreamingRefusingClient:
         self.calls.append(kwargs)
         if not kwargs.get("stream"):
             raise ValueError(
-                "Streaming is required for operations that may take longer "
-                "than 10 minutes."
+                "Streaming is required for operations that may take longer than 10 minutes."
             )
 
         def events():
@@ -140,13 +139,7 @@ def test_connected_request_uses_stream_completion_content(monkeypatch):
 
         def generate(self, **kwargs):
             self.calls.append(kwargs)
-            return iter(
-                [
-                    ResponseStreamCompletionChunk(
-                        content={"result": "complete"}
-                    )
-                ]
-            )
+            return iter([ResponseStreamCompletionChunk(content={"result": "complete"})])
 
     client = CompletedClient()
 
@@ -177,9 +170,7 @@ def test_connected_request_keeps_schema_validation_retries(monkeypatch):
 
         def generate(self, **kwargs):
             self.calls.append(kwargs)
-            return iter(
-                [ResponseStreamCompletionChunk(content=self.responses.pop(0))]
-            )
+            return iter([ResponseStreamCompletionChunk(content=self.responses.pop(0))])
 
     client = ValidationRetryClient()
 

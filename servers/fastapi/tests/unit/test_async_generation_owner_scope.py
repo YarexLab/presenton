@@ -71,9 +71,7 @@ def app_and_engine(monkeypatch, tmp_path, owner_id):
     monkeypatch.setattr(middlewares, "is_disable_auth_enabled", lambda: False)
 
     async def fake_principal(request, session):
-        principal = AuthPrincipal(
-            user_id=owner_id, username="tg_42", is_admin=False, method="jwt"
-        )
+        principal = AuthPrincipal(user_id=owner_id, username="tg_42", is_admin=False, method="jwt")
         return principal, await session.get(User, owner_id)
 
     monkeypatch.setattr(middlewares, "resolve_request_principal", fake_principal)

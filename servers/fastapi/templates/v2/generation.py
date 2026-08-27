@@ -4,11 +4,12 @@ import json
 import logging
 import mimetypes
 import re
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import copy_context
 from json import JSONDecodeError
 from time import perf_counter
-from typing import Any, Callable
+from typing import Any
 
 from llmai import get_client
 from llmai.shared import (
@@ -23,6 +24,8 @@ from llmai.shared import (
 )
 from pydantic import BaseModel, ValidationError
 
+from templates.v2.models.elements import Image as SlideImageElement
+from templates.v2.models.elements import ImageFit
 from templates.v2.models.layouts import (
     Component,
     MergedComponent,
@@ -34,8 +37,6 @@ from templates.v2.models.layouts import (
     SlideLayouts,
     slide_layout_llm_json_schema,
 )
-from templates.v2.models.elements import Image as SlideImageElement
-from templates.v2.models.elements import ImageFit
 from templates.v2.tools import PREVIEW_SLIDE_TOOL_NAME, PreviewSlideTool
 from utils.asset_directory_utils import resolve_image_path_to_filesystem
 from utils.llm_config import get_llm_config
@@ -295,9 +296,7 @@ def _ensure_unique_slide_layout_ids(layouts: list[SlideLayout]) -> list[SlideLay
             suffix += 1
             candidate_id = f"{layout.id}_{suffix}"
         used_ids.add(candidate_id)
-        unique_layouts.append(
-            layout.model_copy(deep=True, update={"id": candidate_id})
-        )
+        unique_layouts.append(layout.model_copy(deep=True, update={"id": candidate_id}))
 
     if duplicate_count:
         LOGGER.warning(
@@ -392,9 +391,7 @@ def merge_similar_components(layouts: SlideLayouts) -> MergedComponents:
         model=get_model(),
         messages=[
             SystemMessage(content=CLUSTER_SIMILAR_COMPONENTS_SYSTEM_PROMPT),
-            UserMessage(
-                content=json.dumps({"components": component_summaries}, indent=2)
-            ),
+            UserMessage(content=json.dumps({"components": component_summaries}, indent=2)),
         ],
         label="similar component clusters",
         output_model=SimilarComponentsList,
@@ -432,9 +429,7 @@ def _validate_similarity_groups(
     for group in clusters.similar_components:
         for index in group.indices:
             if index >= component_count:
-                raise ValueError(
-                    f"similar component index {index} is outside the available range"
-                )
+                raise ValueError(f"similar component index {index} is outside the available range")
             if index in seen:
                 raise ValueError(
                     f"component index {index} appears in more than one similarity group"
@@ -446,9 +441,7 @@ def _build_merged_components(
     components: list[Component],
     similar_groups: list[list[int]],
 ) -> MergedComponents:
-    group_by_index = {
-        index: sorted(group) for group in similar_groups for index in group
-    }
+    group_by_index = {index: sorted(group) for group in similar_groups for index in group}
     used_indices: set[int] = set()
     used_ids: set[str] = set()
     merged_components: list[MergedComponent] = []
@@ -519,9 +512,7 @@ def _deduplicate_merged_components(merged: MergedComponents) -> MergedComponents
             for duplicate_index in duplicate_indices
             for variant in merged.components[duplicate_index].variants
         ]
-        deduplicated.append(
-            component_group.model_copy(deep=True, update={"variants": variants})
-        )
+        deduplicated.append(component_group.model_copy(deep=True, update={"variants": variants}))
 
     return MergedComponents(components=deduplicated)
 
@@ -597,9 +588,7 @@ def _element_duplicate_signature(
                 )
             )
             continue
-        if not decorative and key in _CONTENT_VALUE_KEYS_BY_ELEMENT_TYPE.get(
-            element_type, set()
-        ):
+        if not decorative and key in _CONTENT_VALUE_KEYS_BY_ELEMENT_TYPE.get(element_type, set()):
             continue
         if not decorative and element_type == "table" and key in {"columns", "rows"}:
             items.append((key, _normalize_signature_value(_strip_table_text(value))))
@@ -615,9 +604,7 @@ def _component_content_size(component_data: dict[str, Any]) -> dict[str, float] 
     if not isinstance(elements, list):
         return None
     bounds = _merge_bounds(
-        _element_bounds(element)
-        for element in elements
-        if isinstance(element, dict)
+        _element_bounds(element) for element in elements if isinstance(element, dict)
     )
     if bounds is None:
         return None
@@ -724,11 +711,7 @@ def _merge_bounds(
 
 def _strip_table_text(value: Any) -> Any:
     if isinstance(value, dict):
-        return {
-            key: _strip_table_text(child)
-            for key, child in value.items()
-            if key != "runs"
-        }
+        return {key: _strip_table_text(child) for key, child in value.items() if key != "runs"}
     if isinstance(value, list):
         return [_strip_table_text(item) for item in value]
     return value
@@ -762,10 +745,7 @@ def _axis_signature(value: Any, root_size: Any, axis_key: str) -> Any:
         axis_size = _coerce_number(root_size.get(axis_key))
     if axis_size is not None and axis_size > 0:
         normalized = (number / axis_size) * 1000
-        return (
-            round(normalized / _DUPLICATE_POSITION_GRID_UNITS)
-            * _DUPLICATE_POSITION_GRID_UNITS
-        )
+        return round(normalized / _DUPLICATE_POSITION_GRID_UNITS) * _DUPLICATE_POSITION_GRID_UNITS
     return round(number, 1)
 
 
@@ -787,8 +767,7 @@ def _normalize_signature_value(value: Any) -> Any:
         return value.strip()
     if isinstance(value, dict):
         return tuple(
-            (key, _normalize_signature_value(child))
-            for key, child in sorted(value.items())
+            (key, _normalize_signature_value(child)) for key, child in sorted(value.items())
         )
     if isinstance(value, list):
         return tuple(_normalize_signature_value(item) for item in value)
@@ -826,11 +805,7 @@ def generate_slide_layout(
     *,
     max_tokens: int | None = None,
 ) -> SlideLayout:
-    payload = (
-        _strip_decorative_fields(
-            source_layout.model_dump(mode="json", exclude_none=True)
-        ),
-    )
+    payload = (_strip_decorative_fields(source_layout.model_dump(mode="json", exclude_none=True)),)
     llm_config = get_llm_config()
     client = get_client(config=llm_config)
     model = get_model()
@@ -880,13 +855,9 @@ def generate_prompted_slide_layout(
 
     def validate_generated_layout(layout: SlideLayout) -> None:
         if not PROMPTED_LAYOUT_ID_PATTERN.fullmatch(layout.id):
-            raise ValueError(
-                "layout.id must be snake_case and begin with a lowercase letter"
-            )
+            raise ValueError("layout.id must be snake_case and begin with a lowercase letter")
         if layout.id in existing_layout_ids:
-            raise ValueError(
-                f"layout.id '{layout.id}' already exists; create a unique layout id"
-            )
+            raise ValueError(f"layout.id '{layout.id}' already exists; create a unique layout id")
         if not layout.components:
             raise ValueError("layout.components must contain at least one component")
         if not _contains_editable_template_content(
@@ -938,10 +909,7 @@ def _prompted_layout_context(
                 prompt_terms,
                 item[1].id,
                 item[1].description,
-                *(
-                    component.description
-                    for component in item[1].components
-                ),
+                *(component.description for component in item[1].components),
             ),
             item[0],
         ),
@@ -970,9 +938,7 @@ def _prompted_layout_context(
         )
     selected_components = [
         component.model_dump(mode="json", exclude_none=True)
-        for _, _, component in ranked_components[
-            :PROMPTED_LAYOUT_MAX_REUSABLE_COMPONENTS
-        ]
+        for _, _, component in ranked_components[:PROMPTED_LAYOUT_MAX_REUSABLE_COMPONENTS]
     ]
 
     context: dict[str, Any] = {
@@ -980,18 +946,13 @@ def _prompted_layout_context(
             "name": template_name,
             "description": template_description,
             "fonts": sorted((fonts or {}).keys()),
-            "existing_layout_ids": [
-                layout.id for layout in template_layouts.layouts
-            ],
+            "existing_layout_ids": [layout.id for layout in template_layouts.layouts],
         },
         "reference_layouts": selected_layouts,
         "reusable_components": selected_components,
     }
 
-    while (
-        len(json.dumps(context, ensure_ascii=False))
-        > PROMPTED_LAYOUT_MAX_CONTEXT_CHARS
-    ):
+    while len(json.dumps(context, ensure_ascii=False)) > PROMPTED_LAYOUT_MAX_CONTEXT_CHARS:
         if context["reusable_components"]:
             context["reusable_components"].pop()
             continue
@@ -1004,11 +965,7 @@ def _prompted_layout_context(
 
 
 def _search_terms(value: str) -> set[str]:
-    return {
-        term
-        for term in re.findall(r"[a-z0-9]+", value.lower())
-        if len(term) > 2
-    }
+    return {term for term in re.findall(r"[a-z0-9]+", value.lower()) if len(term) > 2}
 
 
 def _template_context_match_score(
@@ -1021,14 +978,9 @@ def _template_context_match_score(
 
 def _contains_editable_template_content(value: Any) -> bool:
     if isinstance(value, dict):
-        if value.get("decorative") is False and isinstance(
-            value.get("type"), str
-        ):
+        if value.get("decorative") is False and isinstance(value.get("type"), str):
             return True
-        return any(
-            _contains_editable_template_content(child)
-            for child in value.values()
-        )
+        return any(_contains_editable_template_content(child) for child in value.values())
     if isinstance(value, list):
         return any(_contains_editable_template_content(child) for child in value)
     return False
@@ -1049,9 +1001,7 @@ def _replace_content_image_urls_in_elements(elements: list[Any]) -> None:
 def _replace_content_image_url_in_element(element: Any) -> None:
     if isinstance(element, SlideImageElement) and element.decorative is False:
         element.data = (
-            CONTENT_ICON_PLACEHOLDER_URL
-            if element.is_icon
-            else CONTENT_IMAGE_PLACEHOLDER_URL
+            CONTENT_ICON_PLACEHOLDER_URL if element.is_icon else CONTENT_IMAGE_PLACEHOLDER_URL
         )
         if not element.is_icon and element.fit != ImageFit.COVER:
             element.fit = ImageFit.COVER
@@ -1173,8 +1123,7 @@ def _generate_preview_candidate(
             )
             preview_image = preview_tool.render(candidate_layout)
             LOGGER.info(
-                "[templates.v2.llm] %s: preview slide rendered attempt=%d/%d "
-                "duration_ms=%.1f",
+                "[templates.v2.llm] %s: preview slide rendered attempt=%d/%d duration_ms=%.1f",
                 label,
                 attempt,
                 max_attempts,
@@ -1218,8 +1167,7 @@ def _generate_preview_candidate(
                 ),
             ]
             LOGGER.info(
-                "[templates.v2.llm] %s: asking LLM to review rendered preview "
-                "attempt=%d/%d",
+                "[templates.v2.llm] %s: asking LLM to review rendered preview attempt=%d/%d",
                 label,
                 attempt,
                 max_attempts,
@@ -1300,8 +1248,7 @@ def _preview_feedback_instruction(preview_call_count: int) -> str:
             "even when no changes are needed."
         )
     return (
-        base
-        + "Return the complete final SlideLayout JSON, or call previewSlide one more time "
+        base + "Return the complete final SlideLayout JSON, or call previewSlide one more time "
         "only if another visual check is needed."
     )
 
@@ -1538,9 +1485,7 @@ def _json_repair_prompt(
         _format_error_for_prompt(error),
     ]
     if invalid_response is not None:
-        parts.extend(
-            ["", "invalid_response:", _json_dumps_for_prompt(invalid_response)]
-        )
+        parts.extend(["", "invalid_response:", _json_dumps_for_prompt(invalid_response)])
     return "\n".join(parts)
 
 

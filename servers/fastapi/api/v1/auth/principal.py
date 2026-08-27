@@ -1,15 +1,14 @@
+import uuid
 from dataclasses import dataclass
 from typing import Literal
-import uuid
 
 from fastapi import HTTPException, Request
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.v1.auth.users import UsernameUserDatabase, UserManager, get_jwt_strategy
+from api.v1.auth.config import SESSION_COOKIE_NAME
+from api.v1.auth.users import UserManager, UsernameUserDatabase, get_jwt_strategy
 from models.sql.access_token import AccessToken
 from models.sql.user import User
-from api.v1.auth.config import SESSION_COOKIE_NAME
 
 
 @dataclass(frozen=True)

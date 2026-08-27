@@ -1,6 +1,6 @@
 import asyncio
-from types import SimpleNamespace
 import uuid
+from types import SimpleNamespace
 
 import httpx
 
@@ -44,9 +44,7 @@ def _mock_token_database(monkeypatch, token: str | None):
         is_superuser=True,
         is_verified=True,
     )
-    access_token = (
-        DatabaseAccessToken(token=token, user_id=user_id) if token else None
-    )
+    access_token = DatabaseAccessToken(token=token, user_id=user_id) if token else None
 
     class FakeSession:
         async def get(self, model, key):
@@ -84,9 +82,7 @@ def test_presenton_token_verifier_rejects_invalid_token(monkeypatch):
     _mock_token_database(monkeypatch, None)
     verifier = mcp_server.PresentonTokenVerifier()
 
-    access_token = asyncio.run(
-        verifier.verify_token("sk-presenton-invalid-token")
-    )
+    access_token = asyncio.run(verifier.verify_token("sk-presenton-invalid-token"))
 
     assert access_token is None
 

@@ -10,7 +10,6 @@ from utils.infographic_catalog import INFOGRAPHIC_BY_TYPE
 
 from .models.layouts import RawSlideLayout
 
-
 CONTENT_TYPES = {
     "text",
     "image",
@@ -319,17 +318,11 @@ def _schema_without_repeated_name_suffix(
     suffix: str | None,
 ) -> dict[str, Any]:
     if schema.get("type") != "object":
-        return {
-            key: _normalize_schema_value(value, suffix)
-            for key, value in schema.items()
-        }
+        return {key: _normalize_schema_value(value, suffix) for key, value in schema.items()}
 
     properties = schema.get("properties")
     if not isinstance(properties, dict):
-        return {
-            key: _normalize_schema_value(value, suffix)
-            for key, value in schema.items()
-        }
+        return {key: _normalize_schema_value(value, suffix) for key, value in schema.items()}
 
     normalized_properties: dict[str, Any] = {}
     name_map: dict[str, str] = {}
@@ -500,11 +493,7 @@ def _template_component_key(
     occurrence_count: int,
     properties: dict[str, Any],
 ) -> str:
-    key = (
-        f"{component_id}_{occurrence_index}"
-        if occurrence_count > 1
-        else component_id
-    )
+    key = f"{component_id}_{occurrence_index}" if occurrence_count > 1 else component_id
     suffix = 1
     unique_key = key
     while unique_key in properties:
@@ -592,17 +581,11 @@ def _component_schema_nodes_for_element(
     element_type = element.get("type")
     name = _component_schema_element_name(element)
 
-    if (
-        element_type in CONTENT_TYPES
-        and _is_editable_element(element)
-        and name is not None
-    ):
+    if element_type in CONTENT_TYPES and _is_editable_element(element) and name is not None:
         return [
             (
                 name,
-                _component_content_field_schema(
-                    {"name": name, "path": path, "element": element}
-                ),
+                _component_content_field_schema({"name": name, "path": path, "element": element}),
             )
         ]
 
@@ -628,20 +611,13 @@ def _component_schema_nodes_for_element(
             else []
             for index, child in enumerate(children)
         ]
-        child_nodes = [
-            node
-            for node_set in child_node_sets
-            for node in node_set
-        ]
+        child_nodes = [node for node_set in child_node_sets for node in node_set]
         if name is None or not child_nodes:
             return child_nodes
 
         supports_repeated_children = element_type in {"flex", "grid"} or (
             element_type == "group"
-            and all(
-                isinstance(child, dict) and child.get("type") == "group"
-                for child in children
-            )
+            and all(isinstance(child, dict) and child.get("type") == "group" for child in children)
         )
         if supports_repeated_children:
             array_schema = _component_array_schema_for_repeated_children(
@@ -751,9 +727,7 @@ def _component_repeated_children_schema_result(
             _component_normalized_repeated_item_schema(node_set, strategy=strategy)
             for node_set in populated_node_sets
         ]
-        merged_item_schema = _component_merge_repeated_schemas(
-            normalized_item_schemas
-        )
+        merged_item_schema = _component_merge_repeated_schemas(normalized_item_schemas)
         if merged_item_schema is not None:
             min_items, max_items = _component_repeated_item_limits(
                 element,
@@ -817,9 +791,7 @@ def _component_normalization_token_for_nodes(
         return None
 
     token_getter = (
-        _component_numeric_name_token
-        if strategy == "numeric"
-        else _component_prefix_name_token
+        _component_numeric_name_token if strategy == "numeric" else _component_prefix_name_token
     )
     tokens = [token_getter(name) for name, _schema in nodes]
     tokens = [token for token in tokens if token is not None]
@@ -876,9 +848,7 @@ def _component_normalize_schema_value(value: Any, suffix: str | None) -> Any:
                     suffix,
                 )
                 if isinstance(normalized_schema, dict) and "title" in normalized_schema:
-                    normalized_schema["title"] = _component_content_field_title(
-                        normalized_name
-                    )
+                    normalized_schema["title"] = _component_content_field_title(normalized_name)
                 properties[normalized_name] = normalized_schema
             normalized[key] = properties
             continue
@@ -1191,9 +1161,7 @@ def _infographic_content_schema() -> dict[str, Any]:
 def _without_none_values(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            key: _without_none_values(nested)
-            for key, nested in value.items()
-            if nested is not None
+            key: _without_none_values(nested) for key, nested in value.items() if nested is not None
         }
     if isinstance(value, list):
         return [_without_none_values(item) for item in value]

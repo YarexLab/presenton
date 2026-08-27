@@ -77,9 +77,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         async with async_session_maker() as session:
-            configured = bool(
-                await session.scalar(select(func.count()).select_from(User))
-            )
+            configured = bool(await session.scalar(select(func.count()).select_from(User)))
             if not configured:
                 return JSONResponse(
                     status_code=428,
@@ -98,14 +96,8 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
                 path.startswith("/api/v1/admin/")
                 or path.startswith("/api/v1/auth/token/")
                 or path.startswith("/api/v1/ppt/codex/auth/")
-                or (
-                    path.startswith("/api/v1/ppt/fonts/")
-                    and request.method in {"POST", "DELETE"}
-                )
-                or (
-                    path == "/api/v1/ppt/ollama/models/pull"
-                    and request.method == "POST"
-                )
+                or (path.startswith("/api/v1/ppt/fonts/") and request.method in {"POST", "DELETE"})
+                or (path == "/api/v1/ppt/ollama/models/pull" and request.method == "POST")
             )
             if admin_only and (principal.method != "jwt" or not principal.is_admin):
                 return JSONResponse(
@@ -116,9 +108,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             request.state.current_user = user
             request.state.auth_username = principal.username
             if principal.method == "api_key" and user is not None:
-                request.state.internal_session_token = (
-                    await get_jwt_strategy().write_token(user)
-                )
+                request.state.internal_session_token = await get_jwt_strategy().write_token(user)
             context_token = set_current_owner_id(principal.user_id)
             admin_context_token = set_current_owner_is_admin(principal.is_admin)
             try:
@@ -130,9 +120,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
                     )
                     if cloud_response is not None:
                         return cloud_response
-                if path.startswith(
-                    "/app_data/"
-                ) and not is_app_data_path_authorized(
+                if path.startswith("/app_data/") and not is_app_data_path_authorized(
                     path,
                     user_id=principal.user_id,
                     is_admin=principal.is_admin,

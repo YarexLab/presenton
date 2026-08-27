@@ -14,9 +14,7 @@ from utils.infographic_catalog import (
 
 def test_catalog_exposes_all_native_infographic_families():
     assert len(INFOGRAPHIC_BY_TYPE) == 26
-    assert {"gantt", "timeline", "risk_matrix", "org_chart", "mind_map"} <= set(
-        INFOGRAPHIC_BY_TYPE
-    )
+    assert {"gantt", "timeline", "risk_matrix", "org_chart", "mind_map"} <= set(INFOGRAPHIC_BY_TYPE)
 
     hierarchy_matches = search_infographic_catalog(query="hierarchy")
     assert {item["type"] for item in hierarchy_matches} >= {
@@ -70,9 +68,7 @@ def test_chat_tools_browse_and_add_native_infographics():
     tools = ChatTools(memory)
 
     catalog = asyncio.run(
-        tools._get_available_infographics(
-            {"infographicType": "timeline", "query": None}
-        )
+        tools._get_available_infographics({"infographicType": "timeline", "query": None})
     )
     result = asyncio.run(
         tools._add_infographic(

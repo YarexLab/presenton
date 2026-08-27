@@ -6,7 +6,7 @@ import threading
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import dirtyjson
 from fastapi import HTTPException
@@ -38,10 +38,10 @@ class TextGenerationMetrics:
     tokens_per_second: float
     duration_seconds: float
     estimated: bool
-    thinking_tokens: Optional[int] = None
+    thinking_tokens: int | None = None
     thinking_tokens_estimated: bool = False
     supports_thinking: bool = False
-    finish_reason: Optional[str] = None
+    finish_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -59,7 +59,7 @@ class TextGenerationMetrics:
 
 
 async def _raise_if_client_disconnected(
-    disconnect_checker: Optional[DisconnectChecker],
+    disconnect_checker: DisconnectChecker | None,
 ) -> None:
     if disconnect_checker and await disconnect_checker():
         raise asyncio.CancelledError
@@ -68,10 +68,10 @@ async def _raise_if_client_disconnected(
 async def _generate_structured_content(
     client: Any,
     *,
-    disconnect_checker: Optional[DisconnectChecker],
-    text_chunk_callback: Optional[TextChunkCallback] = None,
+    disconnect_checker: DisconnectChecker | None,
+    text_chunk_callback: TextChunkCallback | None = None,
     **kwargs: Any,
-) -> Optional[dict]:
+) -> dict | None:
     # Always stream, even with nothing to stream *to*. Structured generation
     # runs without an explicit max_tokens, so providers default to the model
     # ceiling, and the Anthropic SDK refuses a non-streaming request whose
@@ -110,10 +110,10 @@ async def _generate_structured_content(
 def get_generate_kwargs(
     model: str,
     messages: Sequence[Message],
-    max_tokens: Optional[int] = None,
-    tools: Optional[list[LLMTool]] = None,
-    response_format: Optional[ResponseFormat] = None,
-    reasoning: Optional[ReasoningConfig] = None,
+    max_tokens: int | None = None,
+    tools: list[LLMTool] | None = None,
+    response_format: ResponseFormat | None = None,
+    reasoning: ReasoningConfig | None = None,
     stream: bool = False,
 ) -> dict[str, Any]:
     kwargs: dict[str, Any] = {
@@ -154,7 +154,7 @@ def estimate_message_tokens(messages: Sequence[Message]) -> int:
     )
 
 
-def _usage_token_value(usage: Any, *names: str) -> Optional[int]:
+def _usage_token_value(usage: Any, *names: str) -> int | None:
     for name in names:
         value = usage.get(name) if isinstance(usage, dict) else getattr(usage, name, None)
         if isinstance(value, (int, float)):
@@ -162,15 +162,13 @@ def _usage_token_value(usage: Any, *names: str) -> Optional[int]:
     return None
 
 
-def _usage_thinking_tokens(usage: Any) -> tuple[Optional[int], bool]:
+def _usage_thinking_tokens(usage: Any) -> tuple[int | None, bool]:
     """Return llmai's best thinking count and whether that count is estimated."""
     if usage is None:
         return None, False
 
     reasoning = (
-        usage.get("reasoning")
-        if isinstance(usage, dict)
-        else getattr(usage, "reasoning", None)
+        usage.get("reasoning") if isinstance(usage, dict) else getattr(usage, "reasoning", None)
     )
     billed_tokens = _usage_token_value(reasoning, "billed_tokens")
     if billed_tokens is not None:
@@ -200,18 +198,12 @@ def build_text_generation_metrics(
 ) -> TextGenerationMetrics:
     usage = getattr(completion, "usage", None) if completion is not None else None
     exact_input_tokens = _usage_token_value(usage, "input_tokens", "prompt_tokens")
-    exact_output_tokens = _usage_token_value(
-        usage, "output_tokens", "completion_tokens"
-    )
+    exact_output_tokens = _usage_token_value(usage, "output_tokens", "completion_tokens")
     input_tokens = (
-        exact_input_tokens
-        if exact_input_tokens is not None
-        else estimate_message_tokens(messages)
+        exact_input_tokens if exact_input_tokens is not None else estimate_message_tokens(messages)
     )
     output_tokens = (
-        exact_output_tokens
-        if exact_output_tokens is not None
-        else estimate_text_tokens(content)
+        exact_output_tokens if exact_output_tokens is not None else estimate_text_tokens(content)
     )
     thinking_tokens, thinking_tokens_estimated = _usage_thinking_tokens(usage)
     if thinking_tokens is None and streamed_thinking:
@@ -219,9 +211,7 @@ def build_text_generation_metrics(
         thinking_tokens_estimated = True
 
     supports_thinking = bool(
-        model_supports_thinking
-        or thinking_tokens is not None
-        or streamed_thinking
+        model_supports_thinking or thinking_tokens is not None or streamed_thinking
     )
     if (
         supports_thinking
@@ -249,9 +239,7 @@ def build_text_generation_metrics(
         generated_tokens += thinking_tokens
 
     duration_seconds = (
-        getattr(completion, "duration_seconds", None)
-        if completion is not None
-        else None
+        getattr(completion, "duration_seconds", None) if completion is not None else None
     )
     if not isinstance(duration_seconds, (int, float)) or duration_seconds <= 0:
         duration_seconds = max(time.perf_counter() - started_at, 1e-9)
@@ -317,8 +305,8 @@ async def generate_structured_with_schema_retries(
     strict: bool = False,
     validate_schema: bool = False,
     validate_schema_max_loop_count: int = 4,
-    disconnect_checker: Optional[DisconnectChecker] = None,
-    text_chunk_callback: Optional[TextChunkCallback] = None,
+    disconnect_checker: DisconnectChecker | None = None,
+    text_chunk_callback: TextChunkCallback | None = None,
 ) -> dict:
     """
     Parse retries (inner loop) plus optional JSON Schema validation feedback loops (outer loop),
@@ -328,16 +316,14 @@ async def generate_structured_with_schema_retries(
     working_messages: list[Message] = list(messages)
 
     for validation_attempt in range(max_validation_loops):
-        content: Optional[dict] = None
+        content: dict | None = None
         for attempt in range(3):
             await _raise_if_client_disconnected(disconnect_checker)
             content = await _generate_structured_content(
                 client,
                 disconnect_checker=disconnect_checker,
                 text_chunk_callback=(
-                    text_chunk_callback
-                    if validation_attempt == 0 and attempt == 0
-                    else None
+                    text_chunk_callback if validation_attempt == 0 and attempt == 0 else None
                 ),
                 **get_generate_kwargs(
                     model=model,
@@ -389,7 +375,7 @@ async def generate_structured_with_schema_retries(
     raise HTTPException(status_code=400, detail="LLM did not return any content")
 
 
-def extract_text(content: Any) -> Optional[str]:
+def extract_text(content: Any) -> str | None:
     if content is None:
         return None
     if isinstance(content, str):
@@ -411,7 +397,7 @@ def extract_text(content: Any) -> Optional[str]:
     return None
 
 
-def extract_structured_content(content: Any) -> Optional[dict]:
+def extract_structured_content(content: Any) -> dict | None:
     if content is None:
         return None
     if isinstance(content, dict):
@@ -435,7 +421,7 @@ def extract_structured_content(content: Any) -> Optional[dict]:
     return None
 
 
-def serialize_structured_content(content: Any) -> Optional[str]:
+def serialize_structured_content(content: Any) -> str | None:
     parsed = extract_structured_content(content)
     if parsed is not None:
         return json.dumps(parsed, ensure_ascii=False)
@@ -446,7 +432,7 @@ def serialize_structured_content(content: Any) -> Optional[str]:
     return None
 
 
-def message_content_to_text(content: Sequence[Any] | str | None) -> Optional[str]:
+def message_content_to_text(content: Sequence[Any] | str | None) -> str | None:
     joined = "".join(
         part.text
         for part in normalize_content_parts(content)
@@ -458,7 +444,7 @@ def message_content_to_text(content: Sequence[Any] | str | None) -> Optional[str
 async def stream_generate_events(
     client: Any,
     *,
-    disconnect_checker: Optional[DisconnectChecker] = None,
+    disconnect_checker: DisconnectChecker | None = None,
     **kwargs,
 ) -> AsyncGenerator[Any, None]:
     loop = asyncio.get_running_loop()
@@ -508,13 +494,9 @@ async def stream_generate_events(
             try:
                 item = await asyncio.wait_for(
                     queue.get(),
-                    timeout=(
-                        CLIENT_DISCONNECT_POLL_SECONDS
-                        if disconnect_checker
-                        else None
-                    ),
+                    timeout=(CLIENT_DISCONNECT_POLL_SECONDS if disconnect_checker else None),
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             if item is sentinel:
                 completed = True

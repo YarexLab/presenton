@@ -27,6 +27,9 @@ skills-lock.json
 .codex
 eng.traineddata
 
+servers/fastapi/.coverage
+servers/nextjs/.playwright-cli/
+
 # presenton-export runtime (downloaded via scripts/sync-presentation-export.cjs or Docker build)
 presentation-export/
 .cache/presentation-export/
