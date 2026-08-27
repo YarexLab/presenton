@@ -70,6 +70,7 @@ from services.image_generation_service import ImageGenerationService
 from services.mem0_presentation_memory_service import (
     MEM0_PRESENTATION_MEMORY_SERVICE,
 )
+from services.quota_service import enforce_generation_quota
 from services.temp_file_service import TEMP_FILE_SERVICE
 from services.webhook_service import WebhookService
 from templates.default_templates import resolve_default_template_id
@@ -2446,6 +2447,9 @@ async def check_if_api_request_is_valid(
             status_code=400,
             detail="Number of slides cannot be less than 3 if table of contents is included",
         )
+
+    # Квота на генерацию (P4): 429 при исчерпании, иначе фиксирует запуск.
+    await enforce_generation_quota(sql_session)
 
     # Checking if template is valid. Generation supports TemplateV2 rows and
     # bundled TemplateV2 names only.

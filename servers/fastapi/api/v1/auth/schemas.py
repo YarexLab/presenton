@@ -50,6 +50,11 @@ class TelegramAuthRequest(BaseModel):
     init_data: str = Field(min_length=1, max_length=8192)
 
 
+class AdminSetQuotaRequest(BaseModel):
+    # null сбрасывает на дефолт из GENERATION_QUOTA_PER_DAY; 0 = безлимит.
+    limit: int | None = Field(default=None, ge=0)
+
+
 class AdminCreateUserRequest(AuthCredentialsRequest):
     pass
 

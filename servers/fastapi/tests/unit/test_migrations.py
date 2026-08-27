@@ -798,3 +798,36 @@ def test_upgrade_from_previous_head_adds_template_v2_theme(tmp_path):
         assert "theme" in template_columns
     finally:
         engine.dispose()
+
+
+def test_upgrade_from_theme_revision_adds_generation_quota(tmp_path):
+    """Миграция P4: таблица generation_usage + колонка user.generation_limit."""
+    database_url = f"sqlite:///{tmp_path / 'generation-quota.db'}"
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text('CREATE TABLE "user" (id CHAR(36) PRIMARY KEY)'))
+            connection.execute(
+                text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+            )
+            connection.execute(
+                text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
+                {"revision": migrations.REVISION_TEMPLATE_V2_THEME},
+            )
+
+        command.upgrade(_alembic_config(database_url), "head")
+
+        with engine.connect() as connection:
+            version = connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
+            user_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(user)"))}
+            usage_columns = {
+                row[1] for row in connection.execute(text("PRAGMA table_info(generation_usage)"))
+            }
+
+        assert version == migrations.REVISION_HEAD
+        assert "generation_limit" in user_columns
+        assert {"id", "owner_id", "created_at"} <= usage_columns
+    finally:
+        engine.dispose()

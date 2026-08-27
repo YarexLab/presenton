@@ -1,6 +1,4 @@
 # No active task
 
-P3 закрыта и заархивирована — см. `docs/progress/P3-slide-preview-images.md`.
-Следующая задача — из `tasks.md`. Критический путь MVP пройден (P1–P3);
-дальше по приоритету P4 (квоты на генерацию, нужны до открытия наружу).
-Контракт квоты для бот-дева — новой запиской `docs/tg/03-quota.md`.
+P4 закрыта и влита в `main` — см. `docs/progress/P4-generation-quota.md`.
+Следующая задача — по `tasks.md` (P5: кука для iframe web.telegram.org, или P6: политика регистрации).
