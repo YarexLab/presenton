@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.v1.auth.schemas import (
     AdminCreateUserRequest,
     AdminResetPasswordRequest,
+    AdminSetQuotaRequest,
     PublicUser,
 )
 from api.v1.auth.users import (
@@ -120,6 +121,25 @@ async def create_user(
         auth_version=1,
     )
     session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return serialize_user(user)
+
+
+@API_V1_ADMIN_ROUTER.put("/users/{user_id}/quota", response_model=PublicUser)
+async def set_user_generation_quota(
+    user_id: uuid.UUID,
+    body: AdminSetQuotaRequest,
+    admin: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Персональный лимит генераций на 24ч для пользователя (P4)."""
+    if not admin.is_superuser:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.generation_limit = body.limit
     await session.commit()
     await session.refresh(user)
     return serialize_user(user)

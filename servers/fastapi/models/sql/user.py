@@ -36,3 +36,5 @@ class User(UserBase):
     auth_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default=text("1")
     )
+    # NULL = лимит по умолчанию из GENERATION_QUOTA_PER_DAY (квоты, P4).
+    generation_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
