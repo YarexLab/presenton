@@ -71,7 +71,7 @@ Copy
 template — одно из: general, modern, standard, swift, dynamic, editorial, executive, momentum.
 export_as — только pptx или pdf.
 n_slides можно не передавать, модель определит сама. Если include_table_of_contents: true, то n_slides минимум 3.
-Поле trigger_webhook в схеме есть, но не работает — вебхуки отправляются всегда. Мы его уберём, не полагайся на него.
+Вебхуки отправляются всегда, если пользователь подписан — отдельного флага в запросе нет.
 Ответ — AsyncTaskModel, из него нужен id задачи и data.presentation_id.
 
 Статус

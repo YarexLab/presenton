@@ -1,11 +1,13 @@
-# Активная задача: P10 — убрать неработающий trigger_webhook
+# Активная задача: P11 — удалить мёртвый код связи с фронтом
 
-Ветка: `feat/remove-trigger-webhook`
+Ветка: `feat/remove-dead-layout-code`
 
-**Цель.** В схеме генерации не остаётся поля, которое ведёт себя как заглушка.
+**Цель.** Не путать себя и новых людей мёртвыми файлами прошлой архитектуры.
 
-**Суть.** Поле `trigger_webhook` в схеме генерации игнорируется — вебхуки
-отправляются всегда (см. P7). Убрать из pydantic-схем, TS-типов и
-документации.
+**Суть.** `api/v1/ppt/endpoints/layouts.py` (роутер не зарегистрирован,
+хардкод `localhost:3000`), `templates/layout_code_validation.py` (не
+вызывается), `http://localhost/api/template` в
+`templates/get_layout_by_name.py`. Шаблоны теперь декларативный JSON —
+генерация к фронту не обращается.
 
-P9 закрыта — см. `docs/progress/P9-quota-contract-for-bot.md`.
+P10 закрыта — см. `docs/progress/P10-remove-trigger-webhook.md`.
