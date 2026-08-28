@@ -34,6 +34,3 @@ class GeneratePresentationRequest(BaseModel):
     include_title_slide: bool = Field(default=True, description="Whether to include a title slide")
     files: list[str] | None = Field(default=None, description="Files to use for the presentation")
     export_as: Literal["pptx", "pdf"] = Field(default="pptx", description="Export format")
-    trigger_webhook: bool = Field(
-        default=False, description="Whether to trigger subscribed webhooks"
-    )
