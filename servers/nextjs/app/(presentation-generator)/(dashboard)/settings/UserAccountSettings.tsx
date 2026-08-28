@@ -1,6 +1,7 @@
 import { UserRound } from "lucide-react";
 
 import LogoutButton from "@/components/Auth/LogoutButton";
+import UserQuotaSection from "./UserQuotaSection";
 
 type UserAccountSettingsProps = {
   username: string;
@@ -76,6 +77,8 @@ export default function UserAccountSettings({
                   </p>
                 </div>
               </div>
+
+              <UserQuotaSection />
 
               <div className="mt-6 border-t border-[#EDEEEF] pt-6">
                 <p className="text-sm font-semibold text-[#191919]">
