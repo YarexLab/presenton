@@ -57,7 +57,7 @@ Cypress), корневые npm-скрипты для template-конвертер
 
 ## 6. Что не трогать
 
-- `tasks.md`, `tg.md`, `docs/init.md`, CI-воркфлоу (`.github/`), `electron/` —
+- `tasks.md`, `tg.md`, `docs/init.md`, CI-воркфлоу (`.github/`) —
   по содержимому без отдельной задачи.
 - Новые зависимости и фреймворки (pre-commit, husky, mypy) — только через
   согласование задачи в `tasks.md`.
