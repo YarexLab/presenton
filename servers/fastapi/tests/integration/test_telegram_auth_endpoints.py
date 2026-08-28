@@ -9,7 +9,7 @@ from api.v1.auth.config import SESSION_COOKIE_NAME
 from api.v1.auth.router import API_V1_AUTH_ROUTER
 from models.sql.user import User
 from services.database import get_async_session
-from tests.mocks.telegram import TEST_BOT_TOKEN, make_init_data
+from tests.mocks.telegram import TEST_BOT_TOKEN, make_allowlist_env, make_init_data
 
 
 def _build_client(tmp_path) -> tuple[TestClient, object]:
@@ -121,3 +121,77 @@ def test_missing_bot_token_gets_503(monkeypatch, tmp_path):
     assert response.status_code == 503
 
     asyncio.run(engine.dispose())
+
+
+def test_allowlist_unset_keeps_registration_open(monkeypatch, tmp_path):
+    monkeypatch.setenv("USER_CONFIG_PATH", str(tmp_path / "userConfig.json"))
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TEST_BOT_TOKEN)
+    monkeypatch.delenv("TELEGRAM_ALLOWED_USER_IDS", raising=False)
+    client, engine = _build_client(tmp_path)
+
+    response = client.post(
+        "/api/v1/auth/telegram",
+        json={"init_data": make_init_data(user_id=333)},
+    )
+
+    assert response.status_code == 200
+    assert _user_count(engine) == 1
+
+
+def test_allowlist_admits_listed_user_and_blocks_unlisted(monkeypatch, tmp_path):
+    monkeypatch.setenv("USER_CONFIG_PATH", str(tmp_path / "userConfig.json"))
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TEST_BOT_TOKEN)
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USER_IDS", make_allowlist_env(444, 555))
+    client, engine = _build_client(tmp_path)
+
+    listed = client.post(
+        "/api/v1/auth/telegram",
+        json={"init_data": make_init_data(user_id=444)},
+    )
+    unlisted = client.post(
+        "/api/v1/auth/telegram",
+        json={"init_data": make_init_data(user_id=666)},
+    )
+
+    assert listed.status_code == 200
+    assert unlisted.status_code == 403
+    assert _user_count(engine) == 1
+
+
+def test_allowlist_blocks_existing_account_of_unlisted_user(monkeypatch, tmp_path):
+    monkeypatch.setenv("USER_CONFIG_PATH", str(tmp_path / "userConfig.json"))
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TEST_BOT_TOKEN)
+    client, engine = _build_client(tmp_path)
+    # Аккаунт создан, когда вайтлист ещё не действовал.
+    first = client.post(
+        "/api/v1/auth/telegram",
+        json={"init_data": make_init_data(user_id=777)},
+    )
+    assert first.status_code == 200
+
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USER_IDS", make_allowlist_env(888))
+    client.cookies.clear()
+    second = client.post(
+        "/api/v1/auth/telegram",
+        json={"init_data": make_init_data(user_id=777)},
+    )
+
+    assert second.status_code == 403
+    assert _user_count(engine) == 1
+
+
+def test_empty_allowlist_value_keeps_registration_open(monkeypatch, tmp_path):
+    # Пустая строка = открыто: compose подставляет её, когда переменная не
+    # задана, и деплой без вайтлиста должен работать как раньше.
+    monkeypatch.setenv("USER_CONFIG_PATH", str(tmp_path / "userConfig.json"))
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TEST_BOT_TOKEN)
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USER_IDS", "")
+    client, engine = _build_client(tmp_path)
+
+    response = client.post(
+        "/api/v1/auth/telegram",
+        json={"init_data": make_init_data(user_id=999)},
+    )
+
+    assert response.status_code == 200
+    assert _user_count(engine) == 1

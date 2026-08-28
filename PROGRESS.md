@@ -1,4 +1,7 @@
 # No active task
 
-P4 закрыта и влита в `main` — см. `docs/progress/P4-generation-quota.md`.
-Следующая задача — по `tasks.md` (P5: кука для iframe web.telegram.org, или P6: политика регистрации).
+P6 закрыта и влита в `main` — см. `docs/progress/P6-registration-policy.md`.
+Регистрация через Telegram осталась открытой (решение владельца: бот только для
+тестов); выключатель закрытой беты `TELEGRAM_ALLOWED_USER_IDS` реализован и
+задокументирован. Следующая задача — по `tasks.md`: P7 (ретраи вебхуков) или
+P13 (биллинг бесплатных генераций); P5 ждёт HTTPS-домен.
