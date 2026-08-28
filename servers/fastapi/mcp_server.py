@@ -14,7 +14,7 @@ from fastmcp.server.providers.openapi import MCPType, RouteMap
 from models.sql.access_token import AccessToken as DatabaseAccessToken
 from models.sql.user import User
 from services.database import async_session_maker
-from utils.get_env import is_disable_auth_enabled, is_presenton_electron_desktop
+from utils.get_env import is_disable_auth_enabled
 
 OPENAPI_SPEC_PATH = Path(__file__).with_name("openai_spec.json")
 MCP_API_BASE_URL = "http://127.0.0.1:8000"
@@ -87,11 +87,6 @@ class PresentonTokenVerifier(TokenVerifier):
         )
 
 
-def is_mcp_server_enabled() -> bool:
-    """MCP is only supported in server/Docker deployments, not the Electron app."""
-    return not is_presenton_electron_desktop()
-
-
 def create_mcp_auth_provider() -> TokenVerifier | None:
     """Require admin API-key bearer auth whenever server auth is enabled."""
     if is_disable_auth_enabled():
@@ -150,13 +145,6 @@ async def attach_request_auth_header(request: httpx.Request) -> None:
 
 async def main():
     try:
-        if not is_mcp_server_enabled():
-            print(
-                "INFO: MCP server is disabled in the Presenton Electron desktop app "
-                "(PRESENTON_ELECTRON=true)."
-            )
-            return
-
         print("DEBUG: MCP (OpenAPI) Server startup initiated")
         parser = argparse.ArgumentParser(description="Run the MCP server (from OpenAPI)")
         parser.add_argument("--port", type=int, default=8001, help="Port for the MCP HTTP server")
