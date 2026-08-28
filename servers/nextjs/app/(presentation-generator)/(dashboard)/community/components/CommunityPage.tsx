@@ -404,7 +404,6 @@ function CommunityPresentationCard({
         {thumbnail ? (
           <div className="transition duration-300 group-hover:scale-[1.015]">
             <SmartHtmlSlide
-              executeScripts={false}
               html={thumbnail}
               fonts={presentation.fonts}
               title={`${title} preview`}

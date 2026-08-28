@@ -13,7 +13,8 @@ electron, `PRESENTON_ELECTRON`/`is_presenton_electron_desktop` в бэке.
 привязан. Cypress `--browser electron` в test-all.yml — это их браузерный
 движок, не наше приложение.
 
-**Прогресс.** Фаза 1 (Next.js фронт) готова: 0 упоминаний electron в
-`servers/nextjs`, tsc/build зелёные. Детали —
+**Прогресс.** Фаза 1 (Next.js фронт) закоммичена. Фаза 2 готова:
+`PRESENTON_ELECTRON_BUILD` из next.config.mjs, платформенная ветка
+Linux-рендера в SmartHtmlSlide. tsc/build зелёные. Детали —
 `docs/progress/P12-remove-electron.md`. Дальше: бэкенд
 (`PRESENTON_ELECTRON`), CI-workflow, каталог `electron/`.

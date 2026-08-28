@@ -12,7 +12,7 @@
 - Cypress `--browser electron` в test-all.yml — их браузерный движок, не наше
   приложение.
 
-## Фаза 1. Next.js фронт (эта часть)
+## Фаза 1. Next.js фронт (закоммичено)
 
 Удалены все ветки `window.electron` из рантайм-кода, 8 файлов:
 
@@ -40,6 +40,21 @@
 - Комментарии в `proxy.ts` и `utils/image-url-converter.ts` переписаны без
   упоминания electron.
 
+## Фаза 2. Конфиг сборки и платформенная ветка рендера
+
+- `next.config.mjs` — удалён `PRESENTON_ELECTRON_BUILD` и `images.unoptimized`
+  (флаг существовал только ради read-only-каталога упакованного electron-приложения).
+- `SmartHtmlSlide.tsx` — удалена платформенная развилка
+  `NEXT_PUBLIC_PRESENTON_ELECTRON_PLATFORM === "linux"`: компонент
+  `LinuxInPageSmartHtmlSlide`, хук `useSlideFontAssets`, проп `executeScripts`
+  (после удаления Linux-варианта никем не читался — iframe-вариант всегда
+  рендерит через `srcDoc`), конфиг DOMPurify (санитизация жила только в
+  Linux-варианте), инлайн-подключение tailwind/chart-скриптов в
+  `previewDocument` (нужно было только для in-page исполнения).
+  У 3 community-коллаутов снят `executeScripts={false}`.
+  Хелперы `useSmartChartInjection`/`TailwindBrowserRuntime` остаются —
+  их используют `SmartHtmlEditor` и `PdfMakerPage`.
+
 ## Что НЕ тронуто
 
 - `image-url-converter.ts` — функция осталась, только комментарий; она
@@ -51,11 +66,9 @@
 
 ## Проверка
 
-- `grep -rn "electron" servers/nextjs --include=*.ts,*.tsx` (без node_modules
-  и .next) — 0 совпадений.
-- `tsc --noEmit` — 0 ошибок.
-- eslint по 13 затронутым файлам — 0 ошибок; 4 предупреждения, из них новое
-  только `formatGitHubStars` unused (предупреждение существовало и до
-  правок — функция стала неиспользуемой раньше, удаление вне скоупа фазы,
-  помечено на P13-зачистку).
-- `npm run build` — успешно.
+- `grep -rn "electron" servers/nextjs` по ts/tsx/mjs (без node_modules и
+  .next) — 0 совпадений; `NEXT_PUBLIC_PRESENTON_ELECTRON_PLATFORM` — 0.
+- `tsc --noEmit` — 0 ошибок; eslint по затронутым файлам — 0 ошибок.
+- `npm run build` — успешно (дважды: после фазы 1 и фазы 2).
+- prettier: 4 из 5 затронутых файлов неформатированы и в HEAD —
+  репо не prettier-чистый, форматирование вне скоупа.
