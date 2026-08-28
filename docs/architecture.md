@@ -82,7 +82,8 @@ flowchart LR
 - `Dockerfile`, `Dockerfile.dev`, `docker-compose.yml` — all-in-one образ
   (nginx + nextjs + fastapi + mcp в одном контейнере).
 - `Makefile` — harness-гейт (`make check` / `make check-full` / `make fix`).
-- `electron/` — десктопная обёртка (не наша зона, не трогаем).
+
+> P12: каталог `electron/` (десктопная обёртка) удалён — проект web/Docker-only.
 
 ## Telegram-интеграция (по tg.md)
 
