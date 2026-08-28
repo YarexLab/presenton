@@ -198,4 +198,20 @@ def test_quota_status_endpoint(tmp_path, monkeypatch):
     assert body["limit"] == 10
     assert body["used"] == 1
     assert body["remaining"] == 9
-    assert body["period_hours"] == 24
+    assert body["resets_in_seconds"] is None
+
+
+def test_quota_status_endpoint_requires_session(tmp_path, monkeypatch):
+    """Без сессии — 401: контракт для бота (перелогин через auth/telegram)."""
+    app, _maker = _build_app(tmp_path, monkeypatch, quota_env="10")
+
+    async def _call():
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://testserver",
+        ) as client:
+            return await client.get("/api/v1/quota")
+
+    response = asyncio.run(_call())
+
+    assert response.status_code == 401
