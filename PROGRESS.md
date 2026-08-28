@@ -1,20 +1,3 @@
-# Активная задача: P12 — выпилить Electron
+No active task.
 
-Ветка: `feat/remove-electron`
-
-**Цель.** Не тащить неподдерживаемый рантайм: десктоп не нужен.
-
-**Суть.** Удалить `electron/` (89 файлов), `PRESENTON_ELECTRON_BUILD` в
-`next.config.mjs`, ветки `window.electron` в 8 файлах фронта, CI-workflow
-electron, `PRESENTON_ELECTRON`/`is_presenton_electron_desktop` в бэке.
-
-**Граница (по разведке):** `DISABLE_AUTH` остаётся — это режим деплоя без
-лимитов (tg/03-quota.md) + опора 6 тест-файлов, к Electron-рантайму не
-привязан. Cypress `--browser electron` в test-all.yml — это их браузерный
-движок, не наше приложение.
-
-**Прогресс.** Фаза 1 (Next.js фронт) закоммичена. Фаза 2 готова:
-`PRESENTON_ELECTRON_BUILD` из next.config.mjs, платформенная ветка
-Linux-рендера в SmartHtmlSlide. tsc/build зелёные. Детали —
-`docs/progress/P12-remove-electron.md`. Дальше: бэкенд
-(`PRESENTON_ELECTRON`), CI-workflow, каталог `electron/`.
+Последняя закрытая: P12 — см. `docs/progress/P12-remove-electron.md`.

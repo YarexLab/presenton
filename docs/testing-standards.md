@@ -62,7 +62,8 @@ DISABLE_IMAGE_GENERATION=true
   Чистая логика без браузера — сюда.
 - `npx cypress run --component --browser electron` — компонентные тесты
   (`cypress/`, конфиг `cypress.config.ts`). UI-поведение компонентов — сюда.
-  Запускается только в `check-full` (медленно, нужен electron).
+  Запускается только в `check-full` (медленно; electron здесь — браузерный
+  движок Cypress, не приложение).
 - `npm run lint` (ESLint) — часть быстрого гейта.
 
 ## Корень
