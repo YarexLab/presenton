@@ -31,7 +31,11 @@ from api.v1.auth.users import (
 )
 from models.sql.user import User
 from services.database import get_async_session
-from utils.get_env import get_telegram_bot_token_env, is_disable_auth_enabled
+from utils.get_env import (
+    get_telegram_allowed_user_ids_env,
+    get_telegram_bot_token_env,
+    is_disable_auth_enabled,
+)
 
 API_V1_AUTH_ROUTER = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 API_V1_AUTH_ROUTER.include_router(TOKEN_ROUTER)
@@ -229,6 +233,19 @@ async def login(
     return response
 
 
+def _parse_telegram_allowlist(raw: str | None) -> set[int] | None:
+    """Разбирает TELEGRAM_ALLOWED_USER_IDS (csv). None = режим открыт.
+
+    None/пустая строка означают одно и то же: docker-compose подставляет
+    пустую строку, когда переменная не задана (`${VAR:-}`), поэтому в реальном
+    деплое они неразличимы. Полный выключатель Telegram-входа — незаданный
+    TELEGRAM_BOT_TOKEN (эндпоинт отвечает 503).
+    """
+    if raw is None or raw.strip() == "":
+        return None
+    return {int(part) for part in raw.split(",") if part.strip()}
+
+
 @API_V1_AUTH_ROUTER.post("/telegram")
 async def login_via_telegram(
     body: TelegramAuthRequest,
@@ -245,8 +262,15 @@ async def login_via_telegram(
     except InitDataError:
         raise HTTPException(status_code=401, detail="Unauthorized") from None
 
+    telegram_user_id = int(data["user"]["id"])
+    allowed_ids = _parse_telegram_allowlist(get_telegram_allowed_user_ids_env())
+    if allowed_ids is not None and telegram_user_id not in allowed_ids:
+        # Вайтлист включает режим закрытой беты. Проверяем и существующие
+        # аккаунты: решение владельца — «блокировать тоже» (P6).
+        raise HTTPException(status_code=403, detail="This Telegram account is not allowed")
+
     # Имя только из цифрового id: @username в Telegram меняется, id — нет.
-    username = f"tg_{data['user']['id']}"
+    username = f"tg_{telegram_user_id}"
     user = await session.scalar(select(User).where(User.username == username))
     created = False
     if user is None:

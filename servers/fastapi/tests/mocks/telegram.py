@@ -32,3 +32,8 @@ def make_init_data(
         secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
         pairs["hash"] = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
     return urlencode(pairs)
+
+
+def make_allowlist_env(*user_ids: int) -> str:
+    """Значение TELEGRAM_ALLOWED_USER_IDS для тестов (csv)."""
+    return ",".join(str(uid) for uid in user_ids)

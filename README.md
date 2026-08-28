@@ -519,6 +519,7 @@ Usernames must contain at least 3 characters, and new passwords must contain at 
 | **AUTH_OVERRIDE_FROM_ENV**=[true/false] | Replace the primary administrator's credentials from the environment on the next startup. Use this for a deployment-managed credential rotation. |
 | **RESET_AUTH**=[true/false] | Recover access to the existing primary administrator without replacing the account or its data. |
 | **TELEGRAM_BOT_TOKEN** | Token of the Telegram bot powering the Mini App. Enables `POST /api/v1/auth/telegram` (Telegram sign-in); when unset the endpoint answers 503. |
+| **TELEGRAM_ALLOWED_USER_IDS** | Optional comma-separated Telegram user IDs allowed to sign in via `POST /api/v1/auth/telegram`. Unset or empty = registration open (closed-beta switch, P6). Applies to existing `tg_*` accounts too. |
 | **GENERATION_QUOTA_PER_DAY** | Max presentation generations per user per rolling 24 hours. `0` = unlimited; superusers are never limited. Can be overridden per user via `PUT /api/v1/admin/users/{user_id}/quota`. | `10` |
 
 ##### Presenton Cloud provider

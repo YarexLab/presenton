@@ -49,6 +49,10 @@ def get_telegram_bot_token_env():
     return os.getenv("TELEGRAM_BOT_TOKEN")
 
 
+def get_telegram_allowed_user_ids_env():
+    return os.getenv("TELEGRAM_ALLOWED_USER_IDS")
+
+
 def get_generation_quota_per_day_env():
     return os.getenv("GENERATION_QUOTA_PER_DAY")
 
