@@ -96,9 +96,8 @@ function isApiAuthExempt(pathname: string): boolean {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Docker handles these paths in nginx. Electron has no nginx and chooses
-  // random loopback ports, so proxy them at request time instead of baking a
-  // build-time destination into Next.js' routes manifest.
+  // Proxy these paths at request time instead of baking a build-time
+  // destination into Next.js' routes manifest.
   if (isFastApiAssetPath(pathname)) {
     return rewriteToFastApi(request);
   }
