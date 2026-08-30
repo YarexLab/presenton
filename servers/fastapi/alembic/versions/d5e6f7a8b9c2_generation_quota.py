@@ -30,10 +30,10 @@ def upgrade():
     if "generation_usage" not in tables:
         op.create_table(
             "generation_usage",
-            sa.Column("id", sa.CHAR(36), primary_key=True),
+            sa.Column("id", sa.Uuid(), primary_key=True),
             sa.Column(
                 "owner_id",
-                sa.CHAR(36),
+                sa.Uuid(),
                 sa.ForeignKey("user.id", ondelete="CASCADE"),
                 nullable=True,
             ),
