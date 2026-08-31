@@ -104,7 +104,7 @@ async def enforce_generation_quota(session: AsyncSession) -> None:
     """
     owner_id = get_current_owner_id()
     if owner_id is None:
-        return  # DISABLE_AUTH / electron — однопользовательский режим
+        return  # DISABLE_AUTH — однопользовательский режим
     user = await session.get(User, owner_id)
     if user is None or user.is_superuser:
         return

@@ -1,3 +1,3 @@
 No active task.
 
-Последняя закрытая: P11 — см. `docs/progress/P11-remove-dead-layout-code.md`.
+Последняя закрытая: P12 — см. `docs/progress/P12-remove-electron.md`.

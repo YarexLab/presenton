@@ -231,7 +231,6 @@ export default function CommunityDesignPreviewDialog({
                           className="aspect-[1840/1038] w-full overflow-hidden bg-white"
                         >
                           <SmartHtmlSlide
-                            executeScripts={false}
                             html={slide}
                             fonts={displayedPresentation?.fonts}
                             title={`${title} slide ${index + 1}`}
