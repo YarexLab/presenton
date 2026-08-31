@@ -39,3 +39,6 @@ servers/fastapi/dist/
 servers/fastapi/fastembed_cache/
 servers/fastapi/*.egg-info/
 pptxcollection/
+# graphflow MCP-артефакты
+.graphflow-cache/
+graphflow-out/
