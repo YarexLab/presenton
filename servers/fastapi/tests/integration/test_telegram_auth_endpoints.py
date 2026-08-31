@@ -67,6 +67,45 @@ def test_first_login_creates_user_and_sets_session_cookie(monkeypatch, tmp_path)
     asyncio.run(engine.dispose())
 
 
+def test_cookie_samesite_none_and_secure_behind_https_proxy(monkeypatch, tmp_path):
+    """Десктоп-Telegram грузит миниап в кросс-сайтовом iframe: за https-прокси
+    кука обязана быть SameSite=None; Secure, иначе сессия туда не долетает."""
+    monkeypatch.setenv("USER_CONFIG_PATH", str(tmp_path / "userConfig.json"))
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TEST_BOT_TOKEN)
+    client, engine = _build_client(tmp_path)
+
+    response = client.post(
+        "/api/v1/auth/telegram",
+        json={"init_data": make_init_data(user_id=111)},
+        headers={"X-Forwarded-Proto": "https"},
+    )
+
+    assert response.status_code == 200
+    raw_cookie = response.headers.get("set-cookie", "")
+    assert "samesite=none" in raw_cookie.lower()
+    assert "secure" in raw_cookie.lower()
+
+    asyncio.run(engine.dispose())
+
+
+def test_cookie_stays_lax_on_plain_http(monkeypatch, tmp_path):
+    """Локальный http-дев: none без secure браузеры отвергают — остаётся lax."""
+    monkeypatch.setenv("USER_CONFIG_PATH", str(tmp_path / "userConfig.json"))
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TEST_BOT_TOKEN)
+    client, engine = _build_client(tmp_path)
+
+    response = client.post(
+        "/api/v1/auth/telegram",
+        json={"init_data": make_init_data(user_id=111)},
+    )
+
+    assert response.status_code == 200
+    raw_cookie = response.headers.get("set-cookie", "")
+    assert "samesite=lax" in raw_cookie.lower()
+
+    asyncio.run(engine.dispose())
+
+
 def test_second_login_reuses_the_same_account(monkeypatch, tmp_path):
     monkeypatch.setenv("USER_CONFIG_PATH", str(tmp_path / "userConfig.json"))
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TEST_BOT_TOKEN)
