@@ -74,13 +74,18 @@ def _login_client_host(request: Request) -> str | None:
 
 
 def _set_login_cookie(response: JSONResponse, token: str, request: Request) -> None:
+    # Telegram WebApp в десктоп-клиенте грузит миниап в кросс-сайтовом
+    # iframe: кука "lax" туда не долетает. Для https (за прокси с
+    # X-Forwarded-Proto) ставим "none"+secure; браузеры отвергают
+    # samesite="none" без secure, поэтому на локальном http остаётся "lax".
+    secure = _secure_request(request)
     response.set_cookie(
         SESSION_COOKIE_NAME,
         token,
         max_age=SESSION_TTL_SECONDS,
         httponly=True,
-        secure=_secure_request(request),
-        samesite="lax",
+        secure=secure,
+        samesite="none" if secure else "lax",
         path="/",
     )
 

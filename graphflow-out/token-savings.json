@@ -1,0 +1,20 @@
+{
+  "totalRuns": 1,
+  "totalRawTokens": 6,
+  "totalCompressedTokens": 0,
+  "totalSavedTokens": 6,
+  "averageSavingsPercent": 100,
+  "firstRunAt": "2026-08-31T09:52:59.481Z",
+  "lastRunAt": "2026-08-31T09:52:59.481Z",
+  "recentRecords": [
+    {
+      "timestamp": "2026-08-31T09:52:59.481Z",
+      "query": "telegram auth bot integration routes api",
+      "rawTokens": 6,
+      "compressedTokens": 0,
+      "savingsPercent": 100,
+      "source": "preview_context",
+      "kind": "tokens-not-fidelity"
+    }
+  ]
+}
