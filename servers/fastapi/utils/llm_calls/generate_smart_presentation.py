@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import html as html_module
 import json
+import logging
 import re
 import time
 from collections.abc import Awaitable, Callable, Sequence
@@ -59,6 +60,8 @@ SMART_TOC_MAX_VISIBLE_WORDS = 220
 SmartSlideCallback = Callable[[int, dict[str, str]], Awaitable[None]]
 SmartMetricsCallback = Callable[[TextGenerationMetrics], Awaitable[None]]
 SmartRetryCallback = Callable[[int, str], Awaitable[None]]
+
+LOGGER = logging.getLogger(__name__)
 
 SMART_DECK_SYSTEM_PROMPT = (
     "You are an expert presentation designer and frontend engineer. Return the "
@@ -884,6 +887,12 @@ async def generate_smart_presentation(
             accepted_slides.extend(attempt_slides)
             return {"title": title, "slides": accepted_slides, "metrics": metrics}
         except Exception as exc:
+            LOGGER.warning(
+                "Smart generation attempt %d/%d failed; retrying",
+                _attempt + 1,
+                SMART_GENERATION_MAX_ATTEMPTS,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
             if metrics_task is not None and not metrics_task.done():
                 metrics_task.cancel()
                 await asyncio.gather(metrics_task, return_exceptions=True)

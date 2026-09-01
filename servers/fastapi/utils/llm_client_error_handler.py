@@ -33,7 +33,10 @@ def _chatgpt_auth_required_exception(message: object) -> HTTPException:
 
 
 def handle_llm_client_exceptions(e: Exception) -> HTTPException:
-    traceback.print_exc()
+    # ``e`` is passed as an argument, not raised: ``traceback.print_exc()``
+    # would print "NoneType: None" (no active exception) and lose every frame
+    # of the original error. Print the exception's own chain instead.
+    traceback.print_exception(e)
     if isinstance(e, HTTPException):
         if _is_codex_provider() and e.status_code in {401, 403}:
             return _chatgpt_auth_required_exception(e.detail)
