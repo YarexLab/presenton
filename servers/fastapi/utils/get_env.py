@@ -322,6 +322,10 @@ def get_disable_thinking_env():
     return os.getenv("DISABLE_THINKING")
 
 
+def get_llm_structured_outputs_env():
+    return os.getenv("LLM_STRUCTURED_OUTPUTS")
+
+
 def get_extended_reasoning_env():
     return os.getenv("EXTENDED_REASONING")
 

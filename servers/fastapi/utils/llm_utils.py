@@ -20,7 +20,7 @@ from llmai.shared import (
     normalize_content_parts,
 )
 
-from utils.llm_config import get_extra_body
+from utils.llm_config import get_extra_body, llm_structured_outputs_enabled
 from utils.schema_utils import get_schema_validation_errors
 
 LOGGER = logging.getLogger(__name__)
@@ -125,12 +125,13 @@ def get_generate_kwargs(
         kwargs["max_tokens"] = max_tokens
     if tools:
         kwargs["tools"] = tools
-    if response_format is not None:
-        kwargs["response_format"] = response_format
+    effective_response_format = response_format if llm_structured_outputs_enabled() else None
+    if effective_response_format is not None:
+        kwargs["response_format"] = effective_response_format
     if reasoning is not None:
         kwargs["reasoning"] = reasoning
 
-    extra_body = get_extra_body(uses_tool_choice=bool(tools or response_format))
+    extra_body = get_extra_body(uses_tool_choice=bool(tools or effective_response_format))
     if extra_body:
         kwargs["extra_body"] = extra_body
 
@@ -397,6 +398,73 @@ def extract_text(content: Any) -> str | None:
     return None
 
 
+def _balanced_json_text(text: str) -> str | None:
+    """Return the first brace-balanced ``{...}`` region of ``text``, if any."""
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(text)):
+        char = text[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
+
+def _strip_markdown_fences(text: str) -> str:
+    """Strip a ```json ... ``` (or ``` ... ```) code block around the response."""
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    lines = stripped.splitlines()
+    if lines and lines[0].strip().startswith("```"):
+        body = "\n".join(lines[1:]).rstrip()
+        if body.endswith("```"):
+            body = body[:-3].rstrip()
+        return body
+    return stripped
+
+
+def _extract_json_dict_from_text(raw_text: str) -> dict | None:
+    """Parse a JSON object out of a model's text response.
+
+    Tolerates markdown code fences and surrounding prose, which models
+    occasionally produce when ``response_format`` is not requested (e.g. with
+    ``LLM_STRUCTURED_OUTPUTS=false``). ``dirtyjson`` keeps accepting the dirty
+    JSON shapes the engine already handles (trailing commas, comments).
+    """
+    text = _strip_markdown_fences(raw_text)
+    if not text:
+        return None
+    candidates = [text, _balanced_json_text(text)]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            parsed = dirtyjson.loads(candidate)
+        except Exception:
+            continue
+        if isinstance(parsed, dict):
+            return dict(parsed)
+    return None
+
+
 def extract_structured_content(content: Any) -> dict | None:
     if content is None:
         return None
@@ -411,14 +479,7 @@ def extract_structured_content(content: Any) -> dict | None:
     if not raw_text:
         return None
 
-    try:
-        parsed = dirtyjson.loads(raw_text)
-    except Exception:
-        return None
-
-    if isinstance(parsed, dict):
-        return dict(parsed)
-    return None
+    return _extract_json_dict_from_text(raw_text)
 
 
 def serialize_structured_content(content: Any) -> str | None:

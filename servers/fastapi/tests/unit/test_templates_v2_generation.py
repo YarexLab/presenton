@@ -302,6 +302,34 @@ def test_generate_slide_layout_accepts_direct_schema_response(monkeypatch, caplo
     assert any("slide 1: slide layout JSON returned" in message for message in messages)
 
 
+def test_generate_slide_layout_omits_response_format_when_structured_outputs_disabled(
+    monkeypatch,
+):
+    """LLM_STRUCTURED_OUTPUTS=false: no response_format, fenced JSON text parsed."""
+    monkeypatch.setenv("LLM_STRUCTURED_OUTPUTS", "false")
+    client = _FakeClient(
+        responses=[_FakeResponse(f"```json\n{json.dumps(_generated_layout())}\n```")]
+    )
+    monkeypatch.setattr("templates.v2.generation.get_client", lambda **_kwargs: client)
+    monkeypatch.setattr("templates.v2.generation.get_llm_config", lambda: {})
+    monkeypatch.setattr("templates.v2.generation.get_model", lambda: "test-model")
+    monkeypatch.setattr(
+        PreviewSlideTool,
+        "render",
+        lambda _self, _layout: pytest.fail("preview should not be rendered"),
+    )
+
+    result = generate_slide_layout(
+        _raw_layout(),
+        0,
+        "https://example.com/slide-1.png",
+    )
+
+    assert result == SlideLayout.model_validate(_generated_layout())
+    assert len(client.calls) == 1
+    assert "response_format" not in client.calls[0]
+
+
 def test_generate_slide_layout_replaces_content_image_urls(monkeypatch):
     client = _FakeClient(responses=[_FakeResponse(_generated_layout_with_images())])
     monkeypatch.setattr("templates.v2.generation.get_client", lambda **_kwargs: client)
@@ -708,6 +736,74 @@ def test_merge_similar_components_clusters_by_global_component_index(monkeypatch
     messages = "\n".join(record.getMessage() for record in caplog.records)
     assert "similar_components" not in messages
     assert "schema=SimilarComponentsResponse" in messages
+
+
+def test_merge_similar_components_omits_response_format_when_structured_outputs_disabled(
+    monkeypatch,
+):
+    """LLM_STRUCTURED_OUTPUTS=false: the validation-retry path sends no
+    response_format and parses the model's JSON text response."""
+    monkeypatch.setenv("LLM_STRUCTURED_OUTPUTS", "false")
+    client = _FakeClient('```json\n{"similar_components": [{"indices": [0, 2]}]}\n```')
+    monkeypatch.setattr("templates.v2.generation.get_client", lambda **_kwargs: client)
+    monkeypatch.setattr("templates.v2.generation.get_llm_config", lambda: {})
+    monkeypatch.setattr("templates.v2.generation.get_model", lambda: "test-model")
+
+    first = _generated_layout("first_layout")
+    first["components"][0]["id"] = "title_block"
+    first["components"][0]["description"] = (
+        "Reusable prominent title text block for opening slides."
+    )
+    second = _generated_layout("second_layout")
+    second["components"][0]["id"] = "metric_grid"
+    second["components"][0]["description"] = (
+        "Reusable grid presenting several business metrics and labels."
+    )
+    second["components"][0]["elements"] = [
+        {
+            "type": "grid",
+            "position": {"x": 0, "y": 0},
+            "size": {"width": 600, "height": 180},
+            "columns": 2,
+            "rows": 1,
+            "gap": 24,
+            "name": "metrics",
+            "min_children": 1,
+            "max_children": 2,
+            "children": [
+                {
+                    "type": "text",
+                    "size": {"width": 280, "height": 80},
+                    "decorative": False,
+                    "name": "metric_value",
+                    "min_length": 1,
+                    "max_length": 10,
+                    "runs": [{"text": "42%"}],
+                },
+                {
+                    "type": "text",
+                    "size": {"width": 280, "height": 80},
+                    "decorative": False,
+                    "name": "metric_label",
+                    "min_length": 5,
+                    "max_length": 30,
+                    "runs": [{"text": "Revenue growth"}],
+                },
+            ],
+        }
+    ]
+    third = _generated_layout("third_layout")
+    third["components"][0]["id"] = "section_heading"
+    third["components"][0]["description"] = (
+        "Reusable prominent heading text block for section slides."
+    )
+    layouts = SlideLayouts.model_validate({"layouts": [first, second, third]})
+
+    merged = merge_similar_components(layouts)
+
+    assert len(merged.components) == 2
+    assert len(client.calls) == 1
+    assert "response_format" not in client.calls[0]
 
 
 def test_merge_similar_components_skips_llm_for_single_component(monkeypatch):

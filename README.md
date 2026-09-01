@@ -313,6 +313,7 @@ Other optional variables exist in code (for example advanced Mem0 paths, LitePar
 - **LMSTUDIO_API_KEY**: Optional API key if **LLM** is **lmstudio**.
 - **LMSTUDIO_MODEL**: Required if **LLM** is **lmstudio** (example: `openai/gpt-oss-20b`).
 - **DISABLE_THINKING**=[true/false]: If **true**, disables “thinking” for providers that support it (including DeepSeek).
+- **LLM_STRUCTURED_OUTPUTS**=[true/false]: If **false**, omits `response_format` (structured outputs / `json_schema`) from every LLM request; the engine parses JSON from the model's text response instead. Use for OpenAI-compatible providers/models that reject `response_format` with HTTP 400 (e.g. b.ai, code `400001`). Default: **true**.
 - **WEB_GROUNDING**=[true/false]: If **true**, enables web search by default.
 - **WEB_SEARCH_PROVIDER**=[auto/native/searxng/tavily/exa]: Selects the web search mode. `auto` uses native search for OpenAI, Google, and Anthropic, and otherwise leaves web search off unless you choose an external provider.
 <!-- Brave and Serper search providers are hidden until they are tested. -->

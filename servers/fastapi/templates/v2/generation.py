@@ -39,8 +39,9 @@ from templates.v2.models.layouts import (
 )
 from templates.v2.tools import PREVIEW_SLIDE_TOOL_NAME, PreviewSlideTool
 from utils.asset_directory_utils import resolve_image_path_to_filesystem
-from utils.llm_config import get_llm_config
+from utils.llm_config import get_llm_config, llm_structured_outputs_enabled
 from utils.llm_provider import get_model
+from utils.llm_utils import extract_structured_content
 
 DEFAULT_VALIDATION_RETRIES = 5
 MAX_PARALLEL_SLIDE_LAYOUTS = 10
@@ -1058,12 +1059,13 @@ def _generate_preview_candidate(
             generate_kwargs = {
                 "model": model,
                 "messages": attempt_messages,
-                "response_format": JSONSchemaResponse(
+            }
+            if llm_structured_outputs_enabled():
+                generate_kwargs["response_format"] = JSONSchemaResponse(
                     name="SlideLayoutResponse",
                     strict=False,
                     json_schema=slide_layout_llm_json_schema(),
-                ),
-            }
+                )
             if max_tokens is not None:
                 generate_kwargs["max_tokens"] = max_tokens
             if preview_tool_available:
@@ -1294,16 +1296,18 @@ def _generate_with_validation_retries(
             len(attempt_messages),
         )
         try:
-            response = client.generate(
-                model=model,
-                messages=attempt_messages,
-                response_format=JSONSchemaResponse(
+            generate_kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": attempt_messages,
+                "max_tokens": max_tokens,
+            }
+            if llm_structured_outputs_enabled():
+                generate_kwargs["response_format"] = JSONSchemaResponse(
                     name=response_name,
                     strict=False,
                     json_schema=_llm_response_schema(output_model),
-                ),
-                max_tokens=max_tokens,
-            )
+                )
+            response = client.generate(**generate_kwargs)
         except Exception as exc:
             last_error = exc
             LOGGER.warning(
@@ -1385,10 +1389,22 @@ def _validate_output_model(
 
 def _parse_json_content(content: Any) -> dict[str, Any]:
     text_content = _text_from_content(content)
-    parsed = json.loads(text_content) if text_content is not None else content
-    if not isinstance(parsed, dict):
+    if text_content is not None:
+        try:
+            parsed = json.loads(text_content)
+        except (json.JSONDecodeError, TypeError):
+            # Models may wrap JSON in code fences or prose when
+            # response_format is not requested (LLM_STRUCTURED_OUTPUTS=false).
+            parsed = extract_structured_content(text_content)
+            if parsed is None:
+                raise ValueError("LLM response must be a JSON object")
+            return parsed
+        if not isinstance(parsed, dict):
+            raise ValueError("LLM response must be a JSON object")
+        return parsed
+    if not isinstance(content, dict):
         raise ValueError("LLM response must be a JSON object")
-    return parsed
+    return content
 
 
 def _text_from_content(content: Any) -> str | None:

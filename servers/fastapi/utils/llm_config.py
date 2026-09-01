@@ -63,6 +63,7 @@ from utils.get_env import (
     get_llm_reasoning_budget_tokens_env,
     get_llm_reasoning_effort_env,
     get_llm_reasoning_mode_env,
+    get_llm_structured_outputs_env,
     get_lmstudio_api_key_env,
     get_lmstudio_base_url_env,
     get_ollama_url_env,
@@ -101,6 +102,21 @@ def enable_web_grounding() -> bool:
 
 def disable_thinking() -> bool:
     return parse_bool_or_none(get_disable_thinking_env()) or False
+
+
+def llm_structured_outputs_enabled() -> bool:
+    """Whether LLM requests may send ``response_format`` (structured outputs).
+
+    Some OpenAI-compatible providers/models (e.g. b.ai) reject
+    ``response_format`` with ``{"type": "json_schema"}`` (HTTP 400, code
+    400001) while accepting the same prompt without it. Set
+    ``LLM_STRUCTURED_OUTPUTS=false`` to omit ``response_format`` from every
+    generation request; the engine then parses JSON from the model's text
+    response (with schema-validation repair retries). Defaults to enabled;
+    only explicit falsey values (``0``/``false``/``no``/``off``) disable it.
+    """
+    value = (get_llm_structured_outputs_env() or "").strip().lower()
+    return value not in {"0", "false", "no", "off"}
 
 
 def _get_codex_access_token() -> str:

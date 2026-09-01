@@ -263,3 +263,22 @@ HTTPS-домена невозможно, а домен — на стороне �
 `electron/`, доки.
 
 Не блокирует ничего.
+
+---
+
+### P14. Обход 400001 от b.ai: флаг LLM_STRUCTURED_OUTPUTS — ЗАКРЫТА
+
+**Симптом.** Генерация через TG-бота падает на шаге структуры презентации:
+b.ai отвечает `HTTP 400, code 400001` — «response_format type is unavailable».
+Подробности и диагностика — `docs/engine-response-format-issue.md`.
+
+**Суть.** Модель b.ai не поддерживает `response_format` (`json_schema`).
+Добавлен env-флаг `LLM_STRUCTURED_OUTPUTS` (default `true`); при `false`
+движок не шлёт `response_format` ни в одном LLM-запросе
+(`get_generate_kwargs` + `templates/v2/generation.py`) и парсит JSON из
+текстового ответа (фенсы/проза снимаются в `extract_structured_content`,
+schema-фидбек-луп сохранён). На сервере: `LLM_STRUCTURED_OUTPUTS=false` в
+`.env` + перезапуск контейнера.
+
+**Готово когда.** Генерация из бота проходит без `400` на
+`chat/completions`; `make check` зелёный.
