@@ -38,10 +38,10 @@ def parse_and_verify_init_data(
     for key, value in parse_qsl(init_data, keep_blank_values=True):
         if key == "hash":
             received_hash = value
-        elif key == "signature":
-            # Ed25519-подпись Telegram: в data_check_string не участвует
-            continue
         else:
+            # signature участвует в data_check_string: по докам в DCS
+            # входят ВСЕ получённые поля, кроме hash — новые iOS-клиенты
+            # кладут signature в initData, и Telegram учитывает её в хеше
             data_pairs.append((key, value))
     if not received_hash:
         raise InitDataError("missing hash")

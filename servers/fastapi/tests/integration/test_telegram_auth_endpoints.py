@@ -67,6 +67,23 @@ def test_first_login_creates_user_and_sets_session_cookie(monkeypatch, tmp_path)
     asyncio.run(engine.dispose())
 
 
+def test_login_with_signature_field(monkeypatch, tmp_path):
+    """Новые iOS-клиенты кладут signature в initData, и она участвует
+    в data_check_string — логин обязан проходить (живой кейс 2026-09)."""
+    monkeypatch.setenv("USER_CONFIG_PATH", str(tmp_path / "userConfig.json"))
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TEST_BOT_TOKEN)
+    client, engine = _build_client(tmp_path)
+
+    response = client.post(
+        "/api/v1/auth/telegram",
+        json={"init_data": make_init_data(user_id=222, with_signature=True)},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["authenticated"] is True
+    asyncio.run(engine.dispose())
+
+
 def test_cookie_samesite_none_and_secure_behind_https_proxy(monkeypatch, tmp_path):
     """Десктоп-Telegram грузит миниап в кросс-сайтовом iframe: за https-прокси
     кука обязана быть SameSite=None; Secure, иначе сессия туда не долетает."""

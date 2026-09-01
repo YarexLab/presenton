@@ -18,7 +18,10 @@ def make_init_data(
     user_id: int = 123456789,
     auth_date: int | None = None,
     with_hash: bool = True,
+    with_signature: bool = False,
 ) -> str:
+    """with_signature — живой кейс новых iOS-клиентов: signature приходит
+    в initData и участвует в data_check_string наравне с остальными полями."""
     pairs = {
         "auth_date": str(auth_date if auth_date is not None else int(time.time())),
         "query_id": "AAHd0vUpAAAAAN3S9SkAAABx",
@@ -27,6 +30,8 @@ def make_init_data(
             separators=(",", ":"),
         ),
     }
+    if with_signature:
+        pairs["signature"] = "v3ryR4nd0mEd25519signatureValue"
     if with_hash:
         data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
         secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
