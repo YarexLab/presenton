@@ -299,7 +299,7 @@ export default function CommunityPage() {
             <button
               type="button"
               onClick={() => setRetryVersion((current) => current + 1)}
-              className="mt-4 rounded-full border border-[#E0DDFC] bg-white px-4 py-2 text-xs font-medium text-[#6847F4] transition hover:bg-[#F8F7FF]"
+              className="mt-4 rounded-full border border-[#E0DDFC] bg-white px-4 py-2 text-xs font-medium text-[#6847F4] transition hover:bg-[#EFF6FF]"
             >
               Try again
             </button>
@@ -398,7 +398,7 @@ function CommunityPresentationCard({
       <button
         type="button"
         onClick={onPreview}
-        className="group block aspect-[306/169] w-full overflow-hidden bg-[#F8FBFB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#7A5AF8]/35"
+        className="group block aspect-[306/169] w-full overflow-hidden bg-[#F8FBFB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB]/35"
         aria-label={`Preview ${title}`}
       >
         {thumbnail ? (

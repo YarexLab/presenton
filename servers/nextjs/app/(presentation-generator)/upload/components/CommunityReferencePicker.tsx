@@ -87,7 +87,7 @@ export default function CommunityReferencePicker({
             <button
               type="button"
               onClick={() => onSelect(null)}
-              className="whitespace-nowrap text-xs font-medium text-[#7A5AF8] hover:text-[#6938EF]"
+              className="whitespace-nowrap text-xs font-medium text-[#2563EB] hover:text-[#1D4ED8]"
             >
               Clear selection
             </button>
@@ -96,14 +96,14 @@ export default function CommunityReferencePicker({
       </div>
 
       {loading ? (
-        <div className="flex h-52 items-center justify-center text-[#7A5AF8]">
+        <div className="flex h-52 items-center justify-center text-[#2563EB]">
           <Loader2 className="h-5 w-5 animate-spin" />
         </div>
       ) : error ? (
         <button
           type="button"
           onClick={() => load()}
-          className="mx-auto mt-5 flex h-40 w-[calc(100%-3rem)] items-center justify-center gap-2 rounded-xl border border-dashed border-[#D9D9DE] text-xs text-[#7A5AF8]"
+          className="mx-auto mt-5 flex h-40 w-[calc(100%-3rem)] items-center justify-center gap-2 rounded-xl border border-dashed border-[#D9D9DE] text-xs text-[#2563EB]"
         >
           <RefreshCw className="h-4 w-4" /> Retry community designs
         </button>
@@ -124,7 +124,7 @@ export default function CommunityReferencePicker({
                 key={item.id}
                 className={`min-w-0 overflow-hidden rounded-xl border bg-white transition ${
                   selected
-                    ? "border-[#7A5AF8] ring-2 ring-[#7A5AF8]/15"
+                    ? "border-[#2563EB] ring-2 ring-[#2563EB]/15"
                     : "border-[#EDEEEF] hover:border-[#D8D3FA]"
                 }`}
               >
@@ -157,13 +157,13 @@ export default function CommunityReferencePicker({
                       onClick={() => onSelect(selected ? null : item)}
                       className="flex h-[26px] items-center gap-1.5 rounded-full border border-[#EDEEEF] bg-white px-3 font-syne text-xs font-medium text-[#191919] hover:bg-[#F6F6F9]"
                     >
-                      {selected && <Check className="h-3.5 w-3.5 text-[#7A5AF8]" />}
+                      {selected && <Check className="h-3.5 w-3.5 text-[#2563EB]" />}
                       {selected ? "Selected" : "Use"}
                     </button>
                   </div>
                   <div className="flex min-h-[34px] items-center justify-between border-t border-[#EDEEEF] py-2.5 text-[10px] font-medium tracking-[0.4px] text-[#808080]">
                     <span className="min-w-0 flex-1 truncate">
-                      by {item.created_by?.trim() || "Presenton"}
+                      by {item.created_by?.trim() || "Yarex"}
                     </span>
                     <div className="ml-2 flex shrink-0 items-center gap-2">
                       <span className="inline-flex items-center gap-1">

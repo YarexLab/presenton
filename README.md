@@ -390,7 +390,7 @@ The parallel image generation option applies everywhere images are generated: in
 
 #### Telemetry
 
-- **DISABLE_ANONYMOUS_TRACKING**=[true/false]: Set to **true** to disable anonymous telemetry.
+- **DISABLE_ANONYMOUS_TRACKING**=[true/false]: Set to **true** to disable anonymous telemetry. Defaults to **true** in docker-compose.yml (private Yarex panel).
 
 #### Multi-user authentication
 

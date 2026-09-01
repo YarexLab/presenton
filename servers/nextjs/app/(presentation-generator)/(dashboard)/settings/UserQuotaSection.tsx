@@ -45,8 +45,8 @@ export default function UserQuotaSection() {
 
       <div className="mt-6 rounded-[12px] border border-[#EDEEEF] bg-white p-6">
         <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[4px] bg-[#F4F3FF]">
-            <Zap className="h-5 w-5 text-[#5146E5]" aria-hidden="true" />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[4px] bg-[#EFF6FF]">
+            <Zap className="h-5 w-5 text-[#1D4ED8]" aria-hidden="true" />
           </div>
           <div className="min-w-0">
             <p className="text-xs font-medium text-[#77787C]">
@@ -82,7 +82,7 @@ export default function UserQuotaSection() {
             aria-label="Generations used"
           >
             <div
-              className="h-full rounded-full bg-[#7C51F8]"
+              className="h-full rounded-full bg-[#2563EB]"
               style={{
                 width: `${Math.min(100, status.limit > 0 ? (status.used / status.limit) * 100 : 0)}%`,
               }}

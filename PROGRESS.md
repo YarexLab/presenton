@@ -1,5 +1,7 @@
 # Progress
 
+## Активная задача
+
 No active task.
 
 Последняя закрытая: P14 — обход HTTP 400 400001 от b.ai: флаг
@@ -10,6 +12,11 @@ No active task.
 задача в TASKS.md репо presenton. На сервере: выставить
 `LLM_STRUCTURED_OUTPUTS=false` в `.env` движка и перезапустить контейнер.
 
-Ранее: T-04 — cookie samesite=none+secure за https-прокси (десктоп-Telegram),
+Ранее: P10 — ребрендинг Yarex + hardening внутренней админки
+(servers/nextjs): видимый ребренд + иконки, рестайл purple→blue,
+телеметрия default off, регистрация закрыта по дизайну (setup 409).
+Подробности: docs/progress/P10-yarex-rebrand-admin.md.
+
+Ещё ранее: T-04 — cookie samesite=none+secure за https-прокси (десктоп-Telegram),
 мерж в main `c8c97f44`. Следующая связанная: T-09 — живой smoke против
 движка (ждёт сервера/домена; вайтлист testers вписан в .env движка).

@@ -1,7 +1,8 @@
 "use client";
 
+import { YarexMark } from "@/components/Brand";
 import React from "react";
-import { LayoutDashboard, Star, Brain, Settings, HelpCircle, UsersRound } from "lucide-react";
+import { LayoutDashboard, Star, Brain, Settings, UsersRound } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 
@@ -32,9 +33,7 @@ const DashboardSidebar = () => {
             <div>
 
                 <Link href={`/dashboard`} className="flex items-center  pb-6 border-b border-[#E1E1E5]   gap-2    ">
-                    <div className="bg-[#7C51F8] rounded-full cursor-pointer p-1 flex justify-center items-center mx-auto">
-                        <img src="/logo-with-bg.png" alt="Presenton logo" className="h-[40px] object-contain w-full" />
-                    </div>
+                    <YarexMark size={40} className="mx-auto cursor-pointer" />
                 </Link>
                 <nav className="pt-6 font-syne" aria-label="Dashboard sections">
                     <div className="  space-y-6">
@@ -50,7 +49,7 @@ const DashboardSidebar = () => {
                             aria-label="Dashboard"
                             title="Dashboard"
                         >
-                            <LayoutDashboard className={["h-4 w-4", pathname === "/dashboard" ? "text-[#5146E5]" : "text-slate-600"].join(" ")} />
+                            <LayoutDashboard className={["h-4 w-4", pathname === "/dashboard" ? "text-[#1D4ED8]" : "text-slate-600"].join(" ")} />
                             <span className="text-[11px] text-slate-800">Dashboard</span>
                         </Link>
                         <Link
@@ -64,7 +63,7 @@ const DashboardSidebar = () => {
                             title="Templates"
                         >
                             <div className="flex flex-col cursor-pointer tex-center items-center gap-2  transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={`${pathname === "/templates" ? "#5146E5" : "#475569"}`} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M4 14h6" /><path d="M4 2h10" /><rect x="4" y="18" width="16" height="4" rx="1" /><rect x="4" y="6" width="16" height="4" rx="1" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={`${pathname === "/templates" ? "#1D4ED8" : "#475569"}`} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M4 14h6" /><path d="M4 2h10" /><rect x="4" y="18" width="16" height="4" rx="1" /><rect x="4" y="6" width="16" height="4" rx="1" /></svg>
                                 <span className="text-[11px] text-slate-800">Templates</span>
                             </div>
                         </Link>
@@ -75,7 +74,7 @@ const DashboardSidebar = () => {
                             aria-label="Community"
                             title="Community"
                         >
-                            <UsersRound className={`h-4 w-4 ${pathname === "/community" ? "text-[#5146E5]" : "text-slate-600"}`} />
+                            <UsersRound className={`h-4 w-4 ${pathname === "/community" ? "text-[#1D4ED8]" : "text-slate-600"}`} />
                             <span className="text-[11px] text-slate-800">Community</span>
                         </Link>
                         {/* <Link
@@ -89,7 +88,7 @@ const DashboardSidebar = () => {
                             title="Theme"
                         >
                             <div className="flex flex-col cursor-pointer tex-center items-center gap-2  transition-colors">
-                                <Palette className={`h-4 w-4 ${pathname === "/theme" ? "text-[#5146E5]" : "text-slate-600"}`} />
+                                <Palette className={`h-4 w-4 ${pathname === "/theme" ? "text-[#1D4ED8]" : "text-slate-600"}`} />
                                 <span className="text-[11px] text-slate-800">Themes</span>
                             </div>
                         </Link> */}
@@ -105,15 +104,7 @@ const DashboardSidebar = () => {
                     <Settings className="h-4 w-4" />
                     <span className="text-[11px] text-slate-800">Settings</span>
                 </Link>
-                <div className="py-2"/>
-                <Link
-                    href="https://docs.presenton.ai/help"
-                    target="_blank"
-                    className="flex flex-col items-center gap-2 transition-colors"
-                >
-                    <HelpCircle className="h-4 w-4" />
-                    <span className="text-[11px] text-slate-800">Help</span>
-                </Link>
+
             </div>
 
         </aside>

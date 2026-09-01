@@ -239,7 +239,7 @@ export function InfographicDataEditorContent({
                       Applied to items in order
                     </p>
                   </div>
-                  <Layers3 size={14} className="text-[#7C51F8]" />
+                  <Layers3 size={14} className="text-[#2563EB]" />
                 </div>
                 <ColorEditor
                   colors={colors}
@@ -271,7 +271,7 @@ export function InfographicDataEditorContent({
               </div>
 
               <div className="mt-3 flex gap-2 rounded-lg border border-[#ECECF1] bg-[#F8F8FA] p-3 text-[10px] leading-4 text-[#686873]">
-                <Palette size={14} className="mt-0.5 shrink-0 text-[#7C51F8]" />
+                <Palette size={14} className="mt-0.5 shrink-0 text-[#2563EB]" />
                 <span>The slide background remains visible behind the infographic.</span>
               </div>
             </aside>
@@ -482,7 +482,7 @@ function ColorEditor({
       </div>
       <button
         type="button"
-        className="mt-2 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#B8A3F8] bg-white text-[10px] font-medium text-[#7C51F8] outline-none transition hover:bg-[#F8F5FF] focus-visible:ring-2 focus-visible:ring-[#D8CEFA]"
+        className="mt-2 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#93C5FD] bg-white text-[10px] font-medium text-[#2563EB] outline-none transition hover:bg-[#EFF6FF] focus-visible:ring-2 focus-visible:ring-[#BFDBFE]"
         onClick={() => onChange(appendInfographicColor(colors))}
       >
         <Plus size={13} />
@@ -651,7 +651,7 @@ function GanttEditor({
               className="rounded-xl border border-[#E5E6EB] bg-[#FAFAFC] p-2.5"
             >
               <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="grid size-6 place-items-center rounded-md bg-[#F1ECFF] text-[10px] font-semibold text-[#7C51F8]">
+                <span className="grid size-6 place-items-center rounded-md bg-[#EFF6FF] text-[10px] font-semibold text-[#2563EB]">
                   {index + 1}
                 </span>
                 <div className="flex items-center gap-0.5">
@@ -739,14 +739,14 @@ function GanttEditor({
                     aria-controls={rowPanelId}
                     aria-expanded={isExpanded}
                     aria-label={`${isExpanded ? "Collapse" : "Expand"} row ${rowIndex + 1}`}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-[#D8CEFA]"
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-[#BFDBFE]"
                     onClick={() =>
                       setExpandedRowIndex((current) =>
                         current === rowIndex ? null : rowIndex,
                       )
                     }
                   >
-                    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#F1ECFF] text-[11px] font-semibold text-[#7C51F8]">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#EFF6FF] text-[11px] font-semibold text-[#2563EB]">
                       {rowIndex + 1}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -893,7 +893,7 @@ function GanttTaskEditor({
     <div className="overflow-hidden rounded-xl border border-[#E3E4E9] bg-[#FAFAFC]">
       <div className="flex items-center justify-between border-b border-[#EAEBEF] px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <span className="grid size-6 place-items-center rounded-md bg-white text-[10px] font-semibold text-[#7C51F8]">
+          <span className="grid size-6 place-items-center rounded-md bg-white text-[10px] font-semibold text-[#2563EB]">
             {taskIndex + 1}
           </span>
           <span className="text-[11px] font-semibold text-[#555560]">
@@ -963,7 +963,7 @@ function GanttTaskRangePreview({
       </div>
       <div className="relative h-2 overflow-hidden rounded-full bg-[#ECEEF3]">
         <span
-          className="absolute inset-y-0 rounded-full bg-[#7C51F8]"
+          className="absolute inset-y-0 rounded-full bg-[#2563EB]"
           style={{ left: `${left}%`, width: `${Math.min(100 - left, width)}%` }}
         />
       </div>
@@ -986,7 +986,7 @@ function GanttPositionEditor({
     <div className="rounded-xl border border-[#E5E6EB] bg-white p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-[11px] font-semibold text-[#555560]">{label}</span>
-        <span className="rounded-full bg-[#F1ECFF] px-2 py-0.5 text-[9px] font-semibold text-[#7C51F8]">
+        <span className="rounded-full bg-[#EFF6FF] px-2 py-0.5 text-[9px] font-semibold text-[#2563EB]">
           {Math.round(value.offset * 100)}%
         </span>
       </div>
@@ -1195,7 +1195,7 @@ function RadialCycleEditor({
       >
         <button
           type="button"
-          className="flex w-full items-center gap-4 rounded-lg border border-[#ECECF1] bg-[#F8F8FA] p-3 text-left outline-none transition hover:border-[#B8A3F8] focus-visible:ring-2 focus-visible:ring-[#D8CEFA]"
+          className="flex w-full items-center gap-4 rounded-lg border border-[#ECECF1] bg-[#F8F8FA] p-3 text-left outline-none transition hover:border-[#93C5FD] focus-visible:ring-2 focus-visible:ring-[#BFDBFE]"
           onClick={() => setImagePickerOpen(true)}
         >
           <span className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-full bg-[#E9ECF2]">
@@ -1413,10 +1413,10 @@ function BeforeAfterEditor({
                   <button
                     type="button"
                     aria-expanded={expanded}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-[#D8CEFA]"
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-[#BFDBFE]"
                     onClick={() => setExpandedRow((current) => current === rowIndex ? null : rowIndex)}
                   >
-                    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#F1ECFF] text-[11px] font-semibold text-[#7C51F8]">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#EFF6FF] text-[11px] font-semibold text-[#2563EB]">
                       {rowIndex + 1}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -1458,13 +1458,13 @@ function BeforeAfterEditor({
                               <button
                                 type="button"
                                 aria-label={`Change ${sideLabel} row ${rowIndex + 1} icon`}
-                                className="flex w-full flex-col items-center gap-2 rounded-xl border border-[#DFE0E6] bg-white px-2 py-3 outline-none transition hover:border-[#BDAAF8] focus-visible:ring-2 focus-visible:ring-[#D8CEFA]"
+                                className="flex w-full flex-col items-center gap-2 rounded-xl border border-[#DFE0E6] bg-white px-2 py-3 outline-none transition hover:border-[#BDAAF8] focus-visible:ring-2 focus-visible:ring-[#BFDBFE]"
                                 onClick={() => setEditingIconIndex(itemIndex)}
                               >
                                 <span className="grid size-11 place-items-center rounded-xl bg-[#506FBE]">
                                   <InfographicIconPreview color={icon.color} url={icon.url} />
                                 </span>
-                                <span className="text-[9px] font-semibold text-[#7C51F8]">Change icon</span>
+                                <span className="text-[9px] font-semibold text-[#2563EB]">Change icon</span>
                               </button>
                               <div className="mt-2">
                                 <DeferredColorInput
@@ -1486,7 +1486,7 @@ function BeforeAfterEditor({
                               <LabeledField className="mt-2" label="Description">
                                 <textarea
                                   aria-label={`${sideLabel} row ${rowIndex + 1} description`}
-                                  className="min-h-[72px] w-full resize-y rounded-lg border border-[#E6E6EA] bg-white px-3 py-2 text-[12px] leading-5 text-[#191919] outline-none focus:border-[#7C51F8]"
+                                  className="min-h-[72px] w-full resize-y rounded-lg border border-[#E6E6EA] bg-white px-3 py-2 text-[12px] leading-5 text-[#191919] outline-none focus:border-[#2563EB]"
                                   maxLength={280}
                                   value={item.description ?? ""}
                                   onChange={(event) => updatePairItem(rowIndex, sideIndex as 0 | 1, { description: event.target.value })}
@@ -1723,7 +1723,7 @@ function ComparisonMatrixEditor({
             return (
               <div key={`comparison-option-${index}`} className="rounded-xl border border-[#ECECF1] bg-white p-4">
                 <div className="mb-4 flex flex-wrap items-end gap-3 border-b border-[#EFEFF3] pb-4">
-                  <button type="button" aria-label={`Change option ${index + 1} icon`} className="grid size-11 place-items-center rounded-lg bg-[#506FBE] outline-none transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-[#D8CEFA]" onClick={() => setEditingIconIndex(index)}>
+                  <button type="button" aria-label={`Change option ${index + 1} icon`} className="grid size-11 place-items-center rounded-lg bg-[#506FBE] outline-none transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-[#BFDBFE]" onClick={() => setEditingIconIndex(index)}>
                     <InfographicIconPreview color={icon.color} url={icon.url} />
                   </button>
                   <div className="min-w-[180px] flex-1">
@@ -1923,14 +1923,14 @@ function ItemCollectionEditor<T extends TimelineInfographicItem>({
                     aria-controls={accordionPanelId}
                     aria-expanded={isExpanded}
                     aria-label={`${isExpanded ? "Collapse" : "Expand"} ${itemLabel} ${index + 1}`}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#D8CEFA]"
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#BFDBFE]"
                     onClick={() =>
                       setExpandedIndex((current) =>
                         current === index ? null : index,
                       )
                     }
                   >
-                    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#F1ECFF] text-[10px] font-semibold text-[#7C51F8]">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#EFF6FF] text-[10px] font-semibold text-[#2563EB]">
                       {index + 1}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -1985,7 +1985,7 @@ function ItemCollectionEditor<T extends TimelineInfographicItem>({
                         <button
                           type="button"
                           aria-label={`Change ${itemLabel} ${index + 1} icon`}
-                          className="group flex w-full flex-col items-center gap-2 rounded-lg border border-[#E6E6EA] bg-[#F8F8FA] px-2 py-3 text-[#686873] outline-none transition hover:border-[#B8A3F8] focus-visible:ring-2 focus-visible:ring-[#D8CEFA]"
+                          className="group flex w-full flex-col items-center gap-2 rounded-lg border border-[#E6E6EA] bg-[#F8F8FA] px-2 py-3 text-[#686873] outline-none transition hover:border-[#93C5FD] focus-visible:ring-2 focus-visible:ring-[#BFDBFE]"
                           onClick={() => setEditingIconIndex(index)}
                         >
                           <span className="grid size-11 place-items-center rounded-lg bg-[#506FBE]">
@@ -1994,7 +1994,7 @@ function ItemCollectionEditor<T extends TimelineInfographicItem>({
                               url={icon.url}
                             />
                           </span>
-                          <span className="text-[10px] font-medium text-[#7C51F8]">
+                          <span className="text-[10px] font-medium text-[#2563EB]">
                             Change icon
                           </span>
                         </button>
@@ -2069,7 +2069,7 @@ function ItemCollectionEditor<T extends TimelineInfographicItem>({
                         <LabeledField className="mt-3" label="Description">
                           <textarea
                             aria-label={`${capitalize(itemLabel)} ${index + 1} description`}
-                            className="min-h-[82px] w-full resize-y rounded-lg border border-[#E6E6EA] bg-white px-3 py-2 text-[12px] leading-5 text-[#191919] outline-none transition focus:border-[#7C51F8]"
+                            className="min-h-[82px] w-full resize-y rounded-lg border border-[#E6E6EA] bg-white px-3 py-2 text-[12px] leading-5 text-[#191919] outline-none transition focus:border-[#2563EB]"
                             maxLength={280}
                             value={item.description ?? ""}
                             onChange={(event) =>
@@ -2217,7 +2217,7 @@ function LabeledField({
 }
 
 const inputClassName =
-  "h-9 w-full rounded-lg border border-[#E6E6EA] bg-white px-3 text-[12px] text-[#191919] outline-none transition focus:border-[#7C51F8]";
+  "h-9 w-full rounded-lg border border-[#E6E6EA] bg-white px-3 text-[12px] text-[#191919] outline-none transition focus:border-[#2563EB]";
 
 function TextInput({
   ariaLabel,
@@ -2321,7 +2321,7 @@ function MiniButton({
       aria-label={label}
       title={label}
       disabled={disabled}
-      className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[#191919] outline-none transition hover:bg-[#F5F5F7] focus-visible:ring-2 focus-visible:ring-[#D8CEFA] disabled:cursor-not-allowed disabled:opacity-25"
+      className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[#191919] outline-none transition hover:bg-[#F5F5F7] focus-visible:ring-2 focus-visible:ring-[#BFDBFE] disabled:cursor-not-allowed disabled:opacity-25"
       onClick={onClick}
     >
       {children}
