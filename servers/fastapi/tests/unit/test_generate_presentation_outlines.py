@@ -93,6 +93,15 @@ def test_system_prompt_requires_content_only_outlines_for_visual_instructions():
     assert "never copy production instructions into slide content" in prompt
 
 
+def test_system_prompt_requires_json_object_output_without_structured_outputs():
+    prompt = outline_module.get_system_prompt()
+
+    assert "Return a single JSON object only" in prompt
+    assert '{"slides": [{"content":' in prompt
+    assert "no markdown code fences" in prompt
+    assert '"slides" array must contain the requested number of entries' in prompt
+
+
 def test_outline_schema_describes_audience_facing_content_only():
     content_schema = PresentationOutlineModel.model_json_schema()["$defs"]["SlideOutlineModel"][
         "properties"

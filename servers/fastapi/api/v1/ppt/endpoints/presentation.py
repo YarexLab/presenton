@@ -9,7 +9,6 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-import dirtyjson
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -98,7 +97,11 @@ from utils.llm_calls.generate_smart_presentation import (
     generate_smart_presentation,
     resolve_smart_slide_count,
 )
-from utils.llm_utils import TextGenerationMetrics, message_content_to_text
+from utils.llm_utils import (
+    TextGenerationMetrics,
+    extract_structured_content,
+    message_content_to_text,
+)
 from utils.outline_limits import normalize_outline_payload
 from utils.outline_utils import (
     get_images_for_slides_from_outline,
@@ -2582,10 +2585,10 @@ async def generate_presentation_handler(
 
                 presentation_outlines_text += chunk
 
-            try:
-                presentation_outlines_json = dict(dirtyjson.loads(presentation_outlines_text))
-            except Exception:
-                traceback.print_exc()
+            # Tolerant parse: models without structured outputs may wrap the
+            # JSON in markdown fences or add prose around it.
+            presentation_outlines_json = extract_structured_content(presentation_outlines_text)
+            if presentation_outlines_json is None:
                 raise HTTPException(
                     status_code=400,
                     detail="Failed to generate presentation outlines. Please try again.",

@@ -1,10 +1,8 @@
 import asyncio
 import json
 import logging
-import traceback
 import uuid
 
-import dirtyjson
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +29,7 @@ from utils.llm_calls.generate_presentation_outlines import (
 from utils.llm_calls.generate_presentation_outlines import (
     get_messages as get_outline_messages,
 )
-from utils.llm_utils import message_content_to_text
+from utils.llm_utils import extract_structured_content, message_content_to_text
 from utils.outline_limits import normalize_outline_payload
 from utils.outline_utils import (
     get_no_of_outlines_to_generate_for_n_slides,
@@ -205,12 +203,12 @@ async def stream_outlines(
 
             presentation_outlines_text += chunk
 
-        try:
-            presentation_outlines_json = dict(dirtyjson.loads(presentation_outlines_text))
-        except Exception as e:
-            traceback.print_exc()
+        # Tolerant parse: models without structured outputs may wrap the JSON
+        # in markdown fences or add prose around it.
+        presentation_outlines_json = extract_structured_content(presentation_outlines_text)
+        if presentation_outlines_json is None:
             yield SSEErrorResponse(
-                detail=f"Failed to generate presentation outlines. Please try again. {str(e)}",
+                detail="Failed to generate presentation outlines. Please try again.",
             ).to_string()
             return
 
