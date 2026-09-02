@@ -27,47 +27,6 @@ const initialStatus: AuthStatus = {
   role: null,
 };
 
-/**
- * Telegram injects `window.Telegram.WebApp` (with `initData`) only into pages
- * opened as a WebApp inside Telegram (bot web_app buttons / Mini Apps). In a
- * regular browser there is no Telegram context, so this returns null and the
- * username/password form is shown as usual.
- */
-function getTelegramInitData(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const webApp = (window as Window & { Telegram?: { WebApp?: { initData?: unknown } } })
-    .Telegram?.WebApp;
-  const initData = webApp?.initData;
-  return typeof initData === "string" && initData.length > 0 ? initData : null;
-}
-
-/**
- * When a protected page redirects here with `?reason=unauthorized`, the
- * original URL is still visible as the same-origin referrer. Returning the
- * user to it after (auto) sign-in preserves deep links such as the Telegram
- * "open in editor" presentation URL.
- */
-function getSameOriginReturnTarget(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    const referrer = new URL(document.referrer);
-    if (referrer.origin !== window.location.origin) {
-      return null;
-    }
-    const target = referrer.pathname + referrer.search;
-    if (!target || target === "/" || target.startsWith("/?reason=")) {
-      return null;
-    }
-    return target;
-  } catch {
-    return null;
-  }
-}
-
 export default function AuthGate() {
   const [status, setStatus] = useState<AuthStatus>(initialStatus);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,10 +36,6 @@ export default function AuthGate() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [telegramInitDataValue] = useState<string | null>(() => getTelegramInitData());
-  const [returnTarget] = useState<string | null>(() => getSameOriginReturnTarget());
-  const [isTelegramSigningIn, setIsTelegramSigningIn] = useState(false);
-  const [telegramSignInAttempted, setTelegramSignInAttempted] = useState(false);
   const isSetupMode = useMemo(() => !status.configured, [status.configured]);
 
   useEffect(() => {
@@ -122,8 +77,8 @@ export default function AuthGate() {
     }
 
     setIsRedirecting(true);
-    window.location.replace(returnTarget ?? "/");
-  }, [isLoading, isRedirecting, status.authenticated, returnTarget]);
+    window.location.replace("/");
+  }, [isLoading, isRedirecting, status.authenticated]);
 
   useEffect(() => {
     if (typeof window === "undefined" || isLoading) {
@@ -131,7 +86,7 @@ export default function AuthGate() {
     }
     const params = new URLSearchParams(window.location.search);
     if (params.get("reason") === "unauthorized") {
-      if (status.configured && !status.authenticated && !telegramInitDataValue) {
+      if (status.configured && !status.authenticated) {
         trackEvent(MixpanelEvent.Auth_Unauthorized_Redirect, {
           configured: true,
         });
@@ -142,85 +97,7 @@ export default function AuthGate() {
       }
       window.history.replaceState({}, "", window.location.pathname);
     }
-  }, [isLoading, status.authenticated, status.configured, telegramInitDataValue]);
-
-  // Telegram WebApp auto sign-in: when this page was opened inside Telegram
-  // (bot web_app link), initData proves who the user is - no password needed.
-  // The backend validates the signature and the whitelist.
-  useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      isLoading ||
-      !telegramInitDataValue ||
-      telegramSignInAttempted ||
-      isTelegramSigningIn ||
-      status.authenticated ||
-      !status.configured
-    ) {
-      return;
-    }
-    setIsTelegramSigningIn(true);
-    setTelegramSignInAttempted(true);
-    const controller = new AbortController();
-
-    void (async () => {
-      try {
-        const response = await fetch(
-          getApiUrl("/api/v1/auth/telegram"),
-          {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ init_data: telegramInitDataValue }),
-            signal: controller.signal,
-          }
-        );
-        const payload = (await response.json().catch(() => ({}))) as AuthStatus & {
-          detail?: string;
-        };
-        if (!response.ok) {
-          if (response.status === 403) {
-            notify.error(
-              "Access denied",
-              "This Telegram account is not allowed to use this instance."
-            );
-          } else if (response.status === 503) {
-            notify.error(
-              "Telegram sign-in unavailable",
-              "Telegram sign-in is not configured for this instance. Use your username and password instead."
-            );
-          } else {
-            notify.error(
-              "Telegram sign-in failed",
-              payload.detail || "Please sign in with your username and password."
-            );
-          }
-          setIsTelegramSigningIn(false);
-          return;
-        }
-        setStatus({
-          configured: Boolean(payload.configured),
-          authenticated: Boolean(payload.authenticated),
-          username: payload.username ?? null,
-          role: payload.role ?? null,
-        });
-      } catch (signInError) {
-        console.error(signInError);
-        if (!controller.signal.aborted) {
-          setIsTelegramSigningIn(false);
-        }
-      }
-    })();
-
-    return () => controller.abort();
-  }, [
-    isLoading,
-    telegramInitDataValue,
-    telegramSignInAttempted,
-    isTelegramSigningIn,
-    status.authenticated,
-    status.configured,
-  ]);
+  }, [isLoading, status.authenticated, status.configured]);
 
   const refreshStatus = async () => {
     setIsLoading(true);
@@ -448,7 +325,6 @@ export default function AuthGate() {
   if (
     isLoading ||
     isRedirecting ||
-    isTelegramSigningIn ||
     status.authenticated ||
     !hasMetSplashDuration
   ) {
