@@ -289,7 +289,7 @@ schema-фидбек-луп сохранён). На сервере: `LLM_STRUCTUR
 
 ## Блок 4. CI/CD и инфраструктура
 
-### C1. Деплой на сервер (yarexlab.ru) через GitHub Actions
+### C1. Деплой на сервер (yarexlab.ru) через GitHub Actions — ЗАКРЫТА (docs/progress/C1-deploy-github-actions.md)
 
 **Цель.** Деплой движка на сервер — одна кнопка/мерж в main, без ручного SSH.
 

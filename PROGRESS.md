@@ -2,16 +2,16 @@
 
 ## Активная задача
 
-C1 — деплой на сервер (yarexlab.ru) через GitHub Actions. Режим уточнён
-владельцем: **деплой только кнопкой** (workflow_dispatch, автозапуска нет),
-тесты `test-all.yml` — только push в main (+dispatch), pull_request-триггер
-убран. В deploy.yml добавлен шаг чистки старых образов на сервере после
-успешного smoke (`docker rmi` старых `main-<sha>` + `docker image prune -f`).
-Secrets (DEPLOY_SSH_*, DEPLOY_PATH) и docker login ghcr.io на сервере —
-владелец настроил. Осталось: первый прогон кнопкой и проверка
-pull/up/smoke/cleanup в Actions.
+No active task.
 
-Последняя закрытая: P14 — обход HTTP 400 400001 от b.ai: флаг
+Последняя закрытая: C1 — деплой на сервер (yarexlab.ru) через GitHub
+Actions: кнопка workflow_dispatch (build → `ghcr.io/yarexlab/presenton:
+main-<sha>` → SSH `git pull` + compose pull/up → smoke `/api/v1/auth/status`
+→ чистка старых образов), тесты — только push в main. Проверено живым
+деплоем 2026-09-02. Откат — кнопкой с `deploy_tag`. Подробности:
+docs/progress/C1-deploy-github-actions.md.
+
+Ранее: P14 — обход HTTP 400 400001 от b.ai: флаг
 `LLM_STRUCTURED_OUTPUTS=false` (не слать `response_format`/`json_schema`,
 парсить JSON из текста; гейты в `get_generate_kwargs` и
 `templates/v2/generation.py`, толерантный `extract_structured_content`).
