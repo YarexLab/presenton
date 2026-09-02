@@ -1,7 +1,9 @@
 name: Deploy
 
-# C1 (tasks.md): build образа из main -> ghcr.io/yarexlab/presenton,
-# деплой на сервер по SSH (docker compose pull + up -d), post-deploy smoke.
+# C1 (tasks.md): кнопка в Actions -> build образа текущего main ->
+# ghcr.io/yarexlab/presenton, деплой на сервер по SSH (git pull + compose
+# pull + up -d), post-deploy smoke, чистка старых образов.
+# Автозапуска нет — только вручную.
 #
 # Требуемые secrets (Settings -> Secrets and variables -> Actions):
 #   DEPLOY_SSH_HOST - хост сервера (yarexlab.ru)
@@ -94,6 +96,7 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
             "$SSH_USER@$SSH_HOST" \
             "cd '$DEPLOY_PATH' && \
+             git pull --ff-only && \
              YAREX_IMAGE_TAG='$IMAGE_TAG' docker compose -f docker-compose.server.yml pull presenton && \
              YAREX_IMAGE_TAG='$IMAGE_TAG' docker compose -f docker-compose.server.yml up -d --no-build"
 
