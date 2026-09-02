@@ -314,10 +314,12 @@ schema-фидбек-луп сохранён). На сервере: `LLM_STRUCTUR
 - C1.4. `docker-compose.server.yml` под выбранный вариант: `image:` с тегом
   вместо/вместе с `build:`, фиксация тега деплоя (sha), `.env` на сервере
   без изменений.
-- C1.5. Окружение `production` в GitHub с ручным approval — защита от
-  случайного деплоя каждым пушем (либо `workflow_dispatch`-only).
+- C1.5. Триггер деплоя — только `workflow_dispatch` (кнопка в Actions);
+  автодеплой из main отключён. Окружение `production` с approval не нужно.
 - C1.6. Post-deploy smoke: `curl` health-эндпоинта движка + внятный фейл
   workflow'а при недоступности; откат = redeploy предыдущего sha.
+  После успешного деплоя — чистка старых образов на сервере
+  (`docker rmi` прошлых `main-<sha>` + `docker image prune`).
 - C1.7. (Заодно) добавить `npx tsc --noEmit -p tsconfig.codex-check.json`
   в `test-all.yml` — сейчас гейт есть только локально в `make check`.
 - C1.8. (Заодно) удалить/почистить апстримовские workflows, которые нам не

@@ -2,26 +2,14 @@
 
 ## Активная задача
 
-C1 — деплой на сервер (yarexlab.ru) через GitHub Actions. Код готов
-(`f198b424`): `.github/workflows/deploy.yml` (build из main →
-`ghcr.io/yarexlab/presenton:main-<sha>` → деплой по SSH `compose pull && up -d`
-→ smoke `GET /api/v1/auth/status` на `127.0.0.1:50521`; откат —
-workflow_dispatch с `deploy_tag=main-<sha>`), `docker-compose.server.yml`
-добавлен `image:` (build остался fallback'ом), tsc добавлен в `test-all.yml`,
-апстримовские `docker-release.yml`/`sync-releaes-to-r2.yml` удалены.
-
-Осталось (на стороне владельца/сервера, не код):
-1. Secrets в GitHub: `DEPLOY_SSH_HOST`, `DEPLOY_SSH_USER`, `DEPLOY_SSH_KEY`,
-   `DEPLOY_PATH` (каталог репо на сервере).
-2. Разово на сервере: `docker login ghcr.io` (PAT c read:packages) — пакет
-   приватный; либо сделать пакет public.
-3. Settings → Environments → production: при желании добавить Required
-   reviewer (тогда деплой ждёт approval).
-4. Первый прогон: push в main → проверить в Actions, что pull/up/smoke
-   зелёные.
-
-Важно: до настройки secrets деплой-job на каждый пуш в main будет падать
-(видно в Actions) — build при этом зелёный.
+C1 — деплой на сервер (yarexlab.ru) через GitHub Actions. Режим уточнён
+владельцем: **деплой только кнопкой** (workflow_dispatch, автозапуска нет),
+тесты `test-all.yml` — только push в main (+dispatch), pull_request-триггер
+убран. В deploy.yml добавлен шаг чистки старых образов на сервере после
+успешного smoke (`docker rmi` старых `main-<sha>` + `docker image prune -f`).
+Secrets (DEPLOY_SSH_*, DEPLOY_PATH) и docker login ghcr.io на сервере —
+владелец настроил. Осталось: первый прогон кнопкой и проверка
+pull/up/smoke/cleanup в Actions.
 
 Последняя закрытая: P14 — обход HTTP 400 400001 от b.ai: флаг
 `LLM_STRUCTURED_OUTPUTS=false` (не слать `response_format`/`json_schema`,

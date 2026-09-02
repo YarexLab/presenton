@@ -13,11 +13,9 @@ name: Deploy
 # т.к. пакет приватный. Либо сделать пакет public — тогда логин не нужен.
 #
 # Откат: Actions -> Deploy -> Run workflow, deploy_tag = main-<sha предыдущего
-# удачного деплоя> (workflow_dispatch, build пропускается).
+# удачного деплоя> (build пропускается).
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       deploy_tag:
@@ -40,7 +38,7 @@ jobs:
   build:
     name: Build and push image
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.inputs.deploy_tag == ''
+    if: github.event.inputs.deploy_tag == ''
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
     steps:
@@ -120,3 +118,22 @@ jobs:
           done
           echo "Smoke check failed after 2 minutes" >&2
           exit 1
+
+      - name: Prune old images on server
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # старые тегированные версии main-<sha>, кроме текущей + висячие слои;
+          # неудача чистки не роняет деплой
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+            "$SSH_USER@$SSH_HOST" \
+            "docker images --format '{{.Repository}}:{{.Tag}}' \
+               | grep '^ghcr.io/yarexlab/presenton:main-' \
+               | grep -v ':${IMAGE_TAG}' \
+               | xargs -r docker rmi || true; \
+             docker image prune -f"
