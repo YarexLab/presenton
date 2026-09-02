@@ -77,6 +77,9 @@ jobs:
     name: Deploy to yarexlab.ru
     runs-on: ubuntu-latest
     needs: build
+    # build может быть пропущен (deploy_tag указан явно) — это валидный путь;
+    # падение build'а деплой не запускает
+    if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     # production: можно включить Required reviewers в Settings -> Environments,
     # тогда деплой будет ждать ручного одобрения
     environment: production
