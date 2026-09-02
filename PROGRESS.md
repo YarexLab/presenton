@@ -4,7 +4,12 @@
 
 No active task.
 
-Последняя закрытая: C1 — деплой на сервер (yarexlab.ru) через GitHub
+Последняя закрытая: P15 — редакторский REST для редактирования из
+Telegram Mini App (слайд-операции duplicate/delete/add/order/layout-catalog,
+editor-view + editor-ops, preview refresh). `make check` зелёный (fastapi
+877 passed). Подробности: docs/progress/P15-deck-editor-api.md.
+
+Ранее: C1 — деплой на сервер (yarexlab.ru) через GitHub
 Actions: кнопка workflow_dispatch (build → `ghcr.io/yarexlab/presenton:
 main-<sha>` → SSH `git pull` + compose pull/up → smoke `/api/v1/auth/status`
 → чистка старых образов), тесты — только push в main. Проверено живым

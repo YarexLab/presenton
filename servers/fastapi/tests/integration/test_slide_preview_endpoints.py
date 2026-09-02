@@ -193,6 +193,41 @@ def test_non_pptx_path_is_rejected(monkeypatch, tmp_path):
     asyncio.run(engine.dispose())
 
 
+def test_preview_refresh_render_ignores_cache(monkeypatch, tmp_path):
+    """refresh=true собирает свежий PPTX и перерендеривает даже при готовом кэше."""
+    client, engine, _ = _build_client(tmp_path, monkeypatch)
+    presentation_id = _seed_presentation(engine, OWNER_ID)
+    pptx_path = _owned_pptx(tmp_path, OWNER_ID)
+    fake_render, render_calls = _fake_renderer(_make_pngs(tmp_path, count=2))
+    monkeypatch.setattr(slide_preview, "render_pptx_slides_to_images", fake_render)
+    monkeypatch.setattr(slide_preview, "_preview_dimensions_from_pptx", lambda _path: (1280, 720))
+
+    # прогреть кэш обычным запросом
+    first = client.post(
+        f"/api/v1/ppt/presentation/{presentation_id}/preview",
+        json={"pptx_path": pptx_path},
+    )
+    assert first.status_code == 200
+
+    export_calls = []
+
+    async def fake_export(presentation_id_arg, title, export_as, cookie_header=None):
+        export_calls.append(export_as)
+        return SimpleNamespace(path=_owned_pptx(tmp_path, OWNER_ID))
+
+    monkeypatch.setattr(slide_preview, "export_presentation", fake_export)
+
+    refreshed = client.post(
+        f"/api/v1/ppt/presentation/{presentation_id}/preview",
+        json={"pptx_path": pptx_path, "refresh": True},
+    )
+    assert refreshed.status_code == 200
+    # refresh=True: экспорт запускается заново, кэш игнорируется
+    assert export_calls == ["pptx"]
+    assert len(render_calls) == 2
+    asyncio.run(engine.dispose())
+
+
 def test_foreign_presentation_is_not_found(monkeypatch, tmp_path):
     client, engine, _ = _build_client(tmp_path, monkeypatch)
     foreign_id = _seed_presentation(engine, OTHER_ID)

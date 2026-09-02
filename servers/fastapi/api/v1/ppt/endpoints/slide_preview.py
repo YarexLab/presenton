@@ -39,6 +39,11 @@ class SlidePreviewRequest(BaseModel):
     # Путь на PPTX из завершённой задачи генерации (data.path). Без него
     # экспортируем свежий PPTX сами — это запуск headless Chromium, медленнее.
     pptx_path: str | None = None
+    # refresh=true — всегда собираем свежий PPTX из текущего состояния деки
+    # и перерендериваем PNG (правки через editor-ops не трогают старый файл
+    # экспорта, поэтому кэш по mtime был бы устаревшим). Используется Mini App
+    # после правок; платный экспорт файла при этом не запускается.
+    refresh: bool = False
 
 
 class SlidePreviewResponse(BaseModel):
@@ -99,7 +104,7 @@ async def render_slide_previews(
     if presentation is None:
         raise HTTPException(status_code=404, detail="Presentation not found")
 
-    if body and body.pptx_path:
+    if body and body.pptx_path and not body.refresh:
         pptx_fs_path = _resolve_owned_pptx(body.pptx_path)
     else:
         exported = await export_presentation(
@@ -111,7 +116,7 @@ async def render_slide_previews(
         pptx_fs_path = exported.path
 
     preview_dir = _preview_directory(presentation.id)
-    png_paths = _cached_previews(preview_dir, pptx_fs_path)
+    png_paths = None if body and body.refresh else _cached_previews(preview_dir, pptx_fs_path)
     if png_paths is None:
         # Число слайдов могло уменьшиться — старые файлы удаляем до рендера.
         for stale in os.listdir(preview_dir):

@@ -329,3 +329,32 @@ schema-фидбек-луп сохранён). На сервере: `LLM_STRUCTUR
 **Готово когда.** Мерж в main (или ручной dispatch) доезжает до
 yarexlab.ru новой версией контейнера без ручного SSH; неудачный деплой
 виден в Actions и откатывается.
+
+---
+
+## Блок 5. Редактирование из Telegram Mini App (v2)
+
+Пользовательский путь v1 заканчивается файлом в чате; правки деки — через
+веб-редактор движка по ссылке. Решение владельца: редактирование целиком в
+Mini App через REST движка, внешняя ссылка редактора из UI убирается.
+
+### P15. Редакторский REST (слайд-операции, editor-view/ops, превью-refresh) — ЗАКРЫТА
+
+**Цель.** Mini App может править презентацию без полной перезаписи набора
+слайдов (PATCH /presentation/update пересоздаёт все строки) и без «сырого»
+редактирования ui-JSON.
+
+**Суть.** Добавлены маршруты (все owner-scoped, cookie-сессия):
+слайд-операции (`/slides/{id}/duplicate`, `DELETE /slides/{id}`,
+`POST /presentation/{id}/slides` — пустой или по заготовке из каталога,
+`PATCH /presentation/{id}/slides-order`, `GET /presentation/{id}/layout-catalog`);
+редакторские проекции (`GET /presentation/{id}/editor-view`,
+`PATCH /presentation/{id}/editor-ops` — move/resize/set_text/set_style/
+set_image_url/delete/duplicate/reorder_element с валидацией и атомарностью);
+`POST /presentation/{id}/preview` получил флаг `refresh` — пересборка PNG из
+текущего состояния деки (правки не трогают старый PPTX, кэш по mtime был бы
+устаревшим).
+
+**Готово когда.** `make check` зелёный; тесты: integration
+`test_deck_editor_api.py`, unit `test_deck_editor_service.py`, refresh-превью
+в `test_slide_preview_endpoints.py`. Детали — `docs/progress/P15-deck-editor-api.md`.

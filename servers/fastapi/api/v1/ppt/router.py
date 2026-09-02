@@ -16,6 +16,8 @@ from api.v1.ppt.endpoints.openrouter import OPENROUTER_ROUTER
 from api.v1.ppt.endpoints.outlines import OUTLINES_ROUTER
 from api.v1.ppt.endpoints.presentation import PRESENTATION_ROUTER
 from api.v1.ppt.endpoints.slide import SLIDE_ROUTER
+from api.v1.ppt.endpoints.slide_editor import PRESENTATION_EDITOR_ROUTER
+from api.v1.ppt.endpoints.slide_ops import PRESENTATION_OPS_ROUTER, SLIDES_ROUTER
 from api.v1.ppt.endpoints.slide_preview import SLIDE_PREVIEW_ROUTER
 from api.v1.ppt.endpoints.template import TEMPLATE_ROUTER
 from api.v1.ppt.endpoints.theme import THEMES_ROUTER
@@ -27,6 +29,9 @@ API_V1_PPT_ROUTER.include_router(FILES_ROUTER)
 API_V1_PPT_ROUTER.include_router(FONTS_ROUTER)
 API_V1_PPT_ROUTER.include_router(OUTLINES_ROUTER)
 API_V1_PPT_ROUTER.include_router(SLIDE_ROUTER)
+API_V1_PPT_ROUTER.include_router(SLIDES_ROUTER)
+API_V1_PPT_ROUTER.include_router(PRESENTATION_OPS_ROUTER)
+API_V1_PPT_ROUTER.include_router(PRESENTATION_EDITOR_ROUTER)
 API_V1_PPT_ROUTER.include_router(IMAGES_ROUTER)
 API_V1_PPT_ROUTER.include_router(ICONS_ROUTER)
 API_V1_PPT_ROUTER.include_router(OLLAMA_ROUTER)
