@@ -4,6 +4,11 @@
 
 No active task.
 
+Последняя закрытая: P16 (M4, движковая часть) — editor-state (undo/redo),
+op add_element (text/image/rectangle), op set_data (text-list/chart), rich
+text-разметка **/*/<latex> в set_text, ui и complex-предпросмотр в
+editor-view. Подробности: docs/tg/04-editor-api.md.
+
 Последняя закрытая: P15 — редакторский REST для редактирования из
 Telegram Mini App (слайд-операции duplicate/delete/add/order/layout-catalog,
 editor-view + editor-ops, preview refresh). `make check` зелёный (fastapi

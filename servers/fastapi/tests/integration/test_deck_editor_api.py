@@ -558,3 +558,49 @@ def test_editor_ops_duplicate_delete_and_reorder(stack):
     assert response.status_code == 200
     body = response.json()
     assert len([element for element in body["elements"] if element.get("name") == "body"]) == 1
+
+
+def test_editor_state_replaces_ui(stack):
+    client, _, session_maker = stack
+    deck_id, slide_ids = asyncio.run(_seed_deck(session_maker, owner_id=OWNER_ID))
+    replacement = {
+        "id": "custom",
+        "description": "Восстановленный снимок",
+        "components": [
+            {
+                "id": "content",
+                "position": {"x": 0, "y": 0},
+                "elements": [
+                    {
+                        "id": "restored",
+                        "type": "text",
+                        "name": "heading",
+                        "position": {"x": 10, "y": 10},
+                        "size": {"width": 500, "height": 60},
+                        "font": {"size": 40},
+                        "text": "Откат",
+                    }
+                ],
+            }
+        ],
+    }
+    response = client.patch(
+        f"/api/v1/ppt/presentation/{deck_id}/editor-state",
+        json={"slide_id": str(slide_ids[0]), "ui": replacement},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["editable"] is True
+    headings = [element for element in body["elements"] if element.get("name") == "heading"]
+    assert headings and headings[0]["text"] == "Откат"
+    assert body["ui"] is not None
+
+
+def test_editor_state_rejects_malformed_ui(stack):
+    client, _, session_maker = stack
+    deck_id, slide_ids = asyncio.run(_seed_deck(session_maker, owner_id=OWNER_ID))
+    response = client.patch(
+        f"/api/v1/ppt/presentation/{deck_id}/editor-state",
+        json={"slide_id": str(slide_ids[0]), "ui": {"content": {"title": "x"}}},
+    )
+    assert response.status_code == 422

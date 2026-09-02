@@ -25,6 +25,8 @@ import copy
 import re
 from typing import Any
 
+from utils.template_text_runs import template_text_runs_from_markdown
+
 SLIDE_STAGE_WIDTH = 1280.0
 SLIDE_STAGE_HEIGHT = 720.0
 
@@ -44,7 +46,13 @@ VECTOR_GEOMETRY_TYPES = {
     "vector_shape",
 }
 
+ADDABLE_ELEMENT_TYPES = {"text", "image", "rectangle"}
+COMPLEX_DATA_TYPES = {"text-list", "chart"}
+
 _PATH_SEGMENT_RE = re.compile(r"^(?P<key>components|elements|children)\[(?P<index>\d+)\]$")
+
+DEFAULT_TEXT_FONT = {"size": 24, "color": "#111111"}
+DEFAULT_SHAPE_FILL = {"color": "#3B82F6", "opacity": 1.0}
 
 # Ключи стилей, которые разрешено менять через op "set_style".
 STYLE_SUBKEYS: dict[str, set[str]] = {
@@ -198,6 +206,10 @@ def _editor_element_entry(element: dict[str, Any], path: str) -> dict[str, Any]:
     fill = element.get("fill")
     if isinstance(fill, dict):
         entry["fill"] = copy.deepcopy(fill)
+    if element_type in COMPLEX_DATA_TYPES:
+        preview = _complex_preview_of(element)
+        if preview is not None:
+            entry["complex"] = preview
     return entry
 
 
@@ -287,7 +299,12 @@ def _apply_rect(element: dict[str, Any], rect: dict[str, float]) -> None:
 
 
 def set_element_text(element: dict[str, Any], text: str) -> None:
-    """Заменить текст элемента (runs + плоский text), как делает чат-редактор."""
+    """Заменить текст элемента, сохранив разметку (**жирный**, *курсив*).
+
+    Если в тексте есть разметка (или latex), строим стилизованные runs и НЕ
+    ставим плоский ``text`` (рендер отдаёт приоритет плоскому тексту, иначе
+    маркеры просочились бы на слайд) — как при гидрации контента движка.
+    """
     element_type = str(element.get("type") or "")
     if element_type not in TEXT_TYPES:
         raise ValueError(f"text edits are only allowed for {sorted(TEXT_TYPES)} elements")
@@ -302,15 +319,29 @@ def set_element_text(element: dict[str, Any], text: str) -> None:
         element["runs"] = []
         element["text"] = ""
         return
-    fallback_font = element.get("font")
-    element["runs"] = [
-        {
-            "text": text,
-            **(copy.deepcopy(fallback_font) if isinstance(fallback_font, dict) else {}),
-        }
-    ]
-    # плоский text рендер читает в приоритете над runs
-    element["text"] = text
+    existing_runs = element.get("runs")
+    first_run = existing_runs[0] if isinstance(existing_runs, list) and existing_runs else None
+    runs = template_text_runs_from_markdown(
+        text,
+        first_run if isinstance(first_run, dict) else None,
+        fallback_font=element.get("font"),
+    )
+    element["runs"] = runs
+    styled = any(
+        isinstance(run, dict)
+        and (
+            run.get("type") == "latex"
+            or "latex" in run
+            or (isinstance(run.get("font"), dict) and bool(run["font"].get("bold") or run["font"].get("italic")))
+        )
+        for run in runs
+    )
+    if styled:
+        # плоский text перекрыл бы runs — убираем, рендер читает runs
+        element.pop("text", None)
+    else:
+        element["text"] = runs[0]["text"] if runs else text
+
 
 
 def apply_style_patch(element: dict[str, Any], patch: dict[str, Any]) -> None:
@@ -358,6 +389,203 @@ def apply_style_patch(element: dict[str, Any], patch: dict[str, Any]) -> None:
         element[key] = merged
 
 
+def _complex_preview_of(element: dict[str, Any]) -> dict[str, Any] | None:
+    """Читаемый предпросмотр данных сложных элементов для форм Mini App."""
+    element_type = str(element.get("type") or "")
+    if element_type == "text-list":
+        items: list[str] = []
+        for item in element.get("items") or []:
+            if isinstance(item, dict):
+                run_text = element_text(item)
+                items.append(run_text or "")
+            elif isinstance(item, str):
+                items.append(item)
+        return {"kind": "text-list", "items": items}
+    if element_type == "chart":
+        categories = element.get("categories")
+        series = element.get("series")
+        preview: dict[str, Any] = {"kind": "chart"}
+        if isinstance(categories, list):
+            preview["categories"] = [
+                value for value in categories if isinstance(value, str)
+            ]
+        if isinstance(series, list):
+            normalized_series = []
+            for item in series:
+                if not isinstance(item, dict):
+                    continue
+                data = item.get("data")
+                normalized_series.append(
+                    {
+                        "name": item.get("name") if isinstance(item.get("name"), str) else "",
+                        "data": [
+                            value
+                            for value in (data if isinstance(data, list) else [])
+                            if isinstance(value, (int, float)) and not isinstance(value, bool)
+                        ],
+                    }
+                )
+            preview["series"] = normalized_series
+        return preview
+    return None
+
+
+def _new_component_identifier(ui: dict[str, Any]) -> str:
+    components = ui.get("components")
+    existing = {
+        str(component.get("id"))
+        for component in components
+        if isinstance(component, dict) and isinstance(component.get("id"), str)
+    }
+    counter = len(components) + 1
+    candidate = f"content_{counter}"
+    while candidate in existing:
+        counter += 1
+        candidate = f"content_{counter}"
+    return candidate
+
+
+def _target_elements_container(ui: dict[str, Any]) -> tuple[list[Any], bool]:
+    """(список elements для вставки, был ли найден существующий компонент).
+
+    Новые элементы добавляются в компонент с не-декоративными элементами
+    (обычно «content»); если таких нет — создаём новый компонент на (0,0).
+    """
+    components = ui.get("components")
+    if not isinstance(components, list):
+        raise ValueError("slide ui has no components")
+    for component in components:
+        if not isinstance(component, dict):
+            continue
+        elements = component.get("elements")
+        if not isinstance(elements, list):
+            continue
+        has_editable = any(
+            isinstance(item, dict) and item.get("decorative") is not True
+            for item in elements
+        )
+        if has_editable:
+            return elements, True
+    new_component: dict[str, Any] = {
+        "id": _new_component_identifier(ui),
+        "description": "Added from Mini App editor",
+        "position": {"x": 0, "y": 0},
+        "elements": [],
+    }
+    components.append(new_component)
+    return new_component["elements"], False
+
+
+def _apply_add_element(ui: dict[str, Any], raw_op: dict[str, Any]) -> None:
+    """op add_element {type: text|image|rectangle, rect?: {x,y,width,height}}."""
+    element_type = str(raw_op.get("type") or "")
+    if element_type not in ADDABLE_ELEMENT_TYPES:
+        raise ValueError(f"add_element type must be one of {sorted(ADDABLE_ELEMENT_TYPES)}")
+    rect = raw_op.get("rect")
+    if not isinstance(rect, dict) or not isinstance(rect.get("width"), (int, float)) or not isinstance(
+        rect.get("height"), (int, float)
+    ):
+        rect = {
+            "x": (SLIDE_STAGE_WIDTH - 340) / 2,
+            "y": (SLIDE_STAGE_HEIGHT - 160) / 2,
+            "width": 340,
+            "height": 160 if element_type == "text" else 240,
+        }
+    try:
+        clamped = _clamp_rect(
+            {
+                "x": float(rect.get("x", 0)),
+                "y": float(rect.get("y", 0)),
+                "width": float(rect["width"]),
+                "height": float(rect["height"]),
+            }
+        )
+    except (TypeError, ValueError) as error:
+        raise ValueError("add_element rect must be numeric") from error
+
+    if element_type == "text":
+        element: dict[str, Any] = {
+            "type": "text",
+            "name": "text_added",
+            "position": {"x": clamped["x"], "y": clamped["y"]},
+            "size": {"width": clamped["width"], "height": clamped["height"]},
+            "font": copy.deepcopy(DEFAULT_TEXT_FONT),
+            "text": "",
+            "runs": [{"text": "", **copy.deepcopy(DEFAULT_TEXT_FONT)}],
+            "decorative": False,
+        }
+    elif element_type == "image":
+        element = {
+            "type": "image",
+            "name": "image_added",
+            "position": {"x": clamped["x"], "y": clamped["y"]},
+            "size": {"width": clamped["width"], "height": clamped["height"]},
+            "data": None,
+            "decorative": False,
+        }
+    else:  # rectangle → вектор-прямоугольник
+        x0, y0 = clamped["x"], clamped["y"]
+        x1, y1 = x0 + clamped["width"], y0 + clamped["height"]
+        element = {
+            "type": "vector",
+            "name": "rectangle_added",
+            "shape": "polygon",
+            "points": [
+                {"x": x0, "y": y0},
+                {"x": x1, "y": y0},
+                {"x": x1, "y": y1},
+                {"x": x0, "y": y1},
+            ],
+            "closed": True,
+            "fill": copy.deepcopy(DEFAULT_SHAPE_FILL),
+            "decorative": False,
+        }
+    container, _created = _target_elements_container(ui)
+    container.append(element)
+
+
+def _apply_complex_data(element: dict[str, Any], data: dict[str, Any]) -> None:
+    """op set_data {kind: text-list|chart, data: {...}} — правка данных формой."""
+    element_type = str(element.get("type") or "")
+    if element_type not in COMPLEX_DATA_TYPES:
+        raise ValueError(f"set_data is only allowed for {sorted(COMPLEX_DATA_TYPES)} elements")
+    if element_type == "text-list":
+        items = data.get("items")
+        if not isinstance(items, list) or not all(isinstance(item, str) for item in items):
+            raise ValueError("text-list data.items must be a list of strings")
+        fallback_font = element.get("font")
+        element["items"] = [
+            {"runs": [{"text": item, **(copy.deepcopy(fallback_font) if isinstance(fallback_font, dict) else {})}]}
+            for item in items
+        ]
+        return
+    if element_type == "chart":
+        categories = data.get("categories")
+        if categories is not None and (
+            not isinstance(categories, list) or not all(isinstance(item, str) for item in categories)
+        ):
+            raise ValueError("chart data.categories must be a list of strings")
+        series = data.get("series")
+        if series is not None:
+            if not isinstance(series, list):
+                raise ValueError("chart data.series must be a list")
+            for item in series:
+                if not isinstance(item, dict):
+                    raise ValueError("chart data.series items must be objects")
+                if not isinstance(item.get("name"), str):
+                    raise ValueError("chart series.name must be a string")
+                values = item.get("data")
+                if not isinstance(values, list) or not all(
+                    isinstance(value, (int, float)) and not isinstance(value, bool)
+                    for value in values
+                ):
+                    raise ValueError("chart series.data must be a list of numbers")
+        if categories is not None:
+            element["categories"] = categories
+        if series is not None:
+            element["series"] = copy.deepcopy(series)
+
+
 def apply_editor_ops(
     slide_ui: dict[str, Any],
     ops: list[dict[str, Any]],
@@ -374,6 +602,9 @@ def apply_editor_ops(
         if not isinstance(raw_op, dict):
             raise ValueError("each op must be an object")
         op = str(raw_op.get("op") or "")
+        if op == "add_element":
+            _apply_add_element(slide_ui, raw_op)
+            continue
         path = raw_op.get("element_path")
         if not isinstance(path, str) or not path:
             raise ValueError("each op requires element_path")
@@ -425,6 +656,11 @@ def apply_editor_ops(
             if not isinstance(text, str):
                 raise ValueError("set_text requires text string")
             set_element_text(element, text)
+        elif op == "set_data":
+            data = raw_op.get("data")
+            if not isinstance(data, dict):
+                raise ValueError("set_data requires data object")
+            _apply_complex_data(element, data)
         elif op == "set_style":
             patch = raw_op.get("patch")
             if not isinstance(patch, dict):
@@ -482,9 +718,13 @@ def apply_editor_ops(
 
 
 def editor_view(slide_ui: dict[str, Any], *, slide_id: str) -> dict[str, Any]:
-    """Публичная проекция слайда для canvas-редактора Mini App."""
+    """Публичная проекция слайда для canvas-редактора Mini App.
+
+    Возвращает также полный ``ui`` слайда — клиент держит его как снимок для
+    undo/redo через PATCH editor-state.
+    """
     if not ui_is_editable(slide_ui):
-        return {"slide_id": slide_id, "editable": False, "elements": []}
+        return {"slide_id": slide_id, "editable": False, "elements": [], "ui": None}
     return {
         "slide_id": slide_id,
         "editable": True,
@@ -494,4 +734,5 @@ def editor_view(slide_ui: dict[str, Any], *, slide_id: str) -> dict[str, Any]:
         "width": SLIDE_STAGE_WIDTH,
         "height": SLIDE_STAGE_HEIGHT,
         "elements": collect_editor_elements(slide_ui),
+        "ui": slide_ui,
     }

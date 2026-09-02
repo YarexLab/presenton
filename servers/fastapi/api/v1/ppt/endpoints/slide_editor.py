@@ -47,6 +47,14 @@ class EditorOpsRequest(BaseModel):
     ops: list[EditorOpModel] = Field(min_length=1)
 
 
+class EditorStateRequest(BaseModel):
+    """Полная замена ui слайда (undo/redo): клиент хранит снимки ui из
+    editor-view/editor-ops и восстанавливает их этим маршрутом."""
+
+    slide_id: uuid.UUID
+    ui: dict[str, Any]
+
+
 async def _presentation_or_404(
     session: AsyncSession, presentation_id: uuid.UUID
 ) -> PresentationModel:
@@ -118,6 +126,36 @@ async def apply_slide_editor_ops(
         raise HTTPException(status_code=400, detail=str(error)) from error
 
     slide.ui = updated_ui
+    sql_session.add(slide)
+
+    presentation.updated_at = get_current_utc_datetime()
+    sql_session.add(presentation)
+    await sql_session.commit()
+    await sql_session.refresh(slide)
+
+    view = editor_view(slide.ui, slide_id=str(slide.id))
+    view["presentation_id"] = str(id)
+    return view
+
+
+# ---------------------------------------------------------------------------
+# PATCH /presentation/{id}/editor-state — восстановить ui слайда (undo/redo)
+# ---------------------------------------------------------------------------
+@PRESENTATION_EDITOR_ROUTER.patch("/{id}/editor-state")
+async def replace_slide_editor_state(
+    id: uuid.UUID,
+    request: EditorStateRequest,
+    sql_session: AsyncSession = Depends(get_async_session),
+):
+    presentation = await _presentation_or_404(sql_session, id)
+    slide = await _slide_of_presentation_or_404(sql_session, id, request.slide_id)
+    if not ui_is_editable(request.ui):
+        raise HTTPException(
+            status_code=422,
+            detail="ui must be a slide layout with a components array",
+        )
+
+    slide.ui = copy.deepcopy(request.ui)
     sql_session.add(slide)
 
     presentation.updated_at = get_current_utc_datetime()

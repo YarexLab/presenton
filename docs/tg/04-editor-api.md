@@ -86,3 +86,20 @@ cookie-сессией движка (`POST /api/v1/auth/telegram` → `presenton_
 
 404 — чужая/нет деки или слайда; 400 — невалидная операция/не перестановка;
 422 — нет каталога/неизвестный layout/слайд без ui; 403 — чужой `pptx_path`.
+
+## M4: editor-state, add_element, set_data, rich-text
+
+- `PATCH /api/v1/ppt/presentation/{id}/editor-state` — `{slide_id, ui: {...}}`
+  полная замена ui слайда (опора undo/redo): клиент хранит снимки `ui` из
+  ответов editor-view/editor-ops и восстанавливает их. 422 — ui не слайд.
+- `editor-view` и `editor-ops` теперь возвращают поле `ui` (полный слайд-снимок).
+- Новая op в `editor-ops`: `{"op": "add_element", "type": "text"|"image"|"rectangle", "rect": {x,y,width,height}}` —
+  добавляет элемент в компонент с редактируемым контентом (или создаёт новый).
+- Новая op: `{"op": "set_data", "element_path": …, "data": …}` — данные сложных
+  элементов: для `text-list` — `{items: [string]}`; для `chart` —
+  `{categories?: [string], series?: [{name, data: [number]}]}`.
+- `set_text` понимает разметку `**жирный**`, `*курсив*`, `<latex>…</latex>`:
+  при наличии стилей runs сохраняются стилизованными, плоский `text` не пишется
+  (рендер отдаёт приоритет плоскому тексту).
+- editor-view для `text-list`/`chart` отдаёт читаемый `complex`-предпросмотр
+  (`{kind, items}` / `{kind, categories, series}`) — для форм данных.

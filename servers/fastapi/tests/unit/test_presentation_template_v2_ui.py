@@ -914,7 +914,9 @@ def test_apply_template_content_to_ui_keeps_markdown_run_whitespace():
 
 
 def test_template_markdown_text_runs_keep_source_boundary_spaces():
-    runs = presentation_endpoint._template_text_runs_from_markdown(
+    from utils.template_text_runs import template_text_runs_from_markdown
+
+    runs = template_text_runs_from_markdown(
         "Hello **how are you?** and",
         {"font": {"family": "Inter", "size": 24}},
     )

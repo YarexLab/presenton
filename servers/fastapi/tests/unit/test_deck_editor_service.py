@@ -111,7 +111,7 @@ def test_set_text_writes_flat_text_and_runs():
     element = {"type": "text", "font": {"size": 12}, "text": "old"}
     set_element_text(element, "new")
     assert element["text"] == "new"
-    assert element["runs"] == [{"text": "new", "size": 12}]
+    assert element["runs"] == [{"text": "new", "font": {"size": 12}}]
 
 
 def test_set_text_math_latex():
@@ -252,3 +252,114 @@ def test_ui_is_editable_requires_components_list():
 
 def test_element_rect_missing_geometry_is_none():
     assert element_rect({"type": "text"}) is None
+
+
+# ----------------------------------------------------------------------
+# M4: rich text, add_element, set_data, view c ui/complex
+# ----------------------------------------------------------------------
+def test_set_text_supports_markdown_bold_and_keeps_runs_only():
+    element = {"type": "text", "font": {"size": 24, "color": "#111111"}, "text": "old"}
+    set_element_text(element, "Привет **мир**!")
+    assert "text" not in element  # плоский текст убран: рендер читает runs
+    bold_runs = [
+        run
+        for run in element["runs"]
+        if isinstance(run.get("font"), dict) and run["font"].get("bold")
+    ]
+    assert len(bold_runs) == 1
+    assert bold_runs[0]["text"] == "мир"
+    plain = "".join(
+        str(run.get("text") or "") for run in element["runs"] if run.get("text") is not None
+    )
+    assert plain == "Привет мир!"
+
+
+def test_set_text_plain_keeps_flat_text():
+    element = {"type": "text", "font": {"size": 24}, "text": "old"}
+    set_element_text(element, "просто текст")
+    assert element["text"] == "просто текст"
+    assert element["runs"][0]["text"] == "просто текст"
+
+
+def test_apply_ops_add_element_text_and_rectangle():
+    ui = copy.deepcopy(_slide_ui())
+    apply_editor_ops(
+        ui,
+        [
+            {
+                "op": "add_element",
+                "type": "text",
+                "rect": {"x": 100, "y": 100, "width": 400, "height": 120},
+            },
+            {
+                "op": "add_element",
+                "type": "rectangle",
+                "rect": {"x": 600, "y": 400, "width": 300, "height": 150},
+            },
+        ],
+    )
+    elements = collect_editor_elements(ui)
+    added_text = [e for e in elements if e.get("name") == "text_added"]
+    added_rect = [e for e in elements if e.get("name") == "rectangle_added"]
+    assert len(added_text) == 1
+    assert added_text[0]["rect"]["x"] == 100
+    assert added_text[0]["text"] == ""
+    assert len(added_rect) == 1
+    assert added_rect[0]["rect"] == {"x": 600, "y": 400, "width": 300, "height": 150}
+
+
+def test_apply_ops_add_element_rejects_unknown_type():
+    ui = copy.deepcopy(_slide_ui())
+    with pytest.raises(ValueError, match="add_element type"):
+        apply_editor_ops(ui, [{"op": "add_element", "type": "explosion"}])
+
+
+def test_apply_ops_set_data_text_list():
+    ui = copy.deepcopy(_slide_ui())
+    # добавим text-list вручную в контейнер
+    apply_editor_ops(
+        ui,
+        [{"op": "add_element", "type": "text"}],
+    )
+    container = ui["components"][0]["elements"]
+    container.append({"type": "text-list", "font": {"size": 20}, "items": []})
+    path = f"components[0].elements[{len(container) - 1}]"
+    apply_editor_ops(
+        ui, [{"op": "set_data", "element_path": path, "data": {"items": ["один", "два"]}}]
+    )
+    raw = next(
+        element
+        for element in ui["components"][0]["elements"]
+        if element.get("type") == "text-list"
+    )
+    assert [item["runs"][0]["text"] for item in raw["items"]] == ["один", "два"]
+
+
+def test_apply_ops_set_data_validates_text_list():
+    ui = copy.deepcopy(_slide_ui())
+    container = ui["components"][0]["elements"]
+    container.append({"type": "text-list", "font": {"size": 20}, "items": []})
+    path = f"components[0].elements[{len(container) - 1}]"
+    with pytest.raises(ValueError, match="list of strings"):
+        apply_editor_ops(ui, [{"op": "set_data", "element_path": path, "data": {"items": [1, 2]}}])
+
+
+def test_editor_view_includes_ui_and_complex_preview():
+    ui = copy.deepcopy(_slide_ui())
+    container = ui["components"][0]["elements"]
+    container.append(
+        {
+            "type": "chart",
+            "categories": ["A", "B"],
+            "series": [{"name": "s1", "data": [1, 2]}],
+            "decorative": False,
+        }
+    )
+    view = editor_view(ui, slide_id="s1")
+    assert view["ui"] is ui
+    chart = next(e for e in view["elements"] if e["type"] == "chart")
+    assert chart["complex"] == {
+        "kind": "chart",
+        "categories": ["A", "B"],
+        "series": [{"name": "s1", "data": [1, 2]}],
+    }
