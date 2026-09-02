@@ -284,3 +284,46 @@ schema-фидбек-луп сохранён). На сервере: `LLM_STRUCTUR
 
 **Готово когда.** Генерация из бота проходит без `400` на
 `chat/completions`; `make check` зелёный.
+
+---
+
+## Блок 4. CI/CD и инфраструктура
+
+### C1. Деплой на сервер (yarexlab.ru) через GitHub Actions
+
+**Цель.** Деплой движка на сервер — одна кнопка/мерж в main, без ручного SSH.
+
+**Текущее состояние.** На сервере один контейнер из `docker-compose.server.yml`
+(build на месте, порт `127.0.0.1:50521`, TLS на nginx хоста). В GitHub Actions
+есть только апстримовские workflows: `test-all.yml` (тесты), `docker-release.yml`
+(пушит образ в `ghcr.io/presenton/presenton` — чужой registry, на релизы),
+`sync-releaes-to-r2.yml` (десктоп-релизы Presenton, нам не нужен). Деплоя нет.
+
+**Подзадачи.**
+
+- C1.1. Определиться со способом доставки образа:
+  (a) build в CI → push в `ghcr.io/<owner>/yarex` → на сервере compose
+  `pull && up -d` (рекомендуется: сервер не собирает, деплой быстрый,
+  есть откат на предыдущий тег);
+  (b) SSH → `git pull` → build на сервере (проще, но сборка на проде).
+- C1.2. `deploy.yml`: job build (+ пуш образа при варианте a), job deploy
+  по SSH (`appleboy/ssh-action` или ssh + secrets).
+- C1.3. Secrets в GitHub: `DEPLOY_SSH_HOST`, `DEPLOY_SSH_USER`,
+  `DEPLOY_SSH_KEY` (deploy-key с правом на репо/хост), при (a) —
+  `GHCR_TOKEN` для pull на сервере.
+- C1.4. `docker-compose.server.yml` под выбранный вариант: `image:` с тегом
+  вместо/вместе с `build:`, фиксация тега деплоя (sha), `.env` на сервере
+  без изменений.
+- C1.5. Окружение `production` в GitHub с ручным approval — защита от
+  случайного деплоя каждым пушем (либо `workflow_dispatch`-only).
+- C1.6. Post-deploy smoke: `curl` health-эндпоинта движка + внятный фейл
+  workflow'а при недоступности; откат = redeploy предыдущего sha.
+- C1.7. (Заодно) добавить `npx tsc --noEmit -p tsconfig.codex-check.json`
+  в `test-all.yml` — сейчас гейт есть только локально в `make check`.
+- C1.8. (Заодно) удалить/почистить апстримовские workflows, которые нам не
+  нужны (`sync-releaes-to-r2.yml`; `docker-release.yml` — заменить на наш
+  build в ghcr.io/<owner>/yarex).
+
+**Готово когда.** Мерж в main (или ручной dispatch) доезжает до
+yarexlab.ru новой версией контейнера без ручного SSH; неудачный деплой
+виден в Actions и откатывается.
