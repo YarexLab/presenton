@@ -94,16 +94,17 @@ API-контракты на стороне fastapi/nextjs:
   `window.Telegram.WebApp.initData` как есть), проверяет подпись, создаёт
   аккаунт при первом входе, возвращает сессионную куку. Пользователь вида
   `tg_<telegram_id>` дальше неотличим от веб-пользователя (та же кука, тот же
-  owner-скоупинг). Статус: план в `PROGRESS.md` (задача P2), кода пока нет.
+  owner-скоупинг). Реализовано (`api/v1/auth/telegram.py`, задача P2).
 - **Async-генерация**: `POST /api/v1/ppt/presentation/generate/async` →
   `AsyncTaskModel` (`id`, `data.presentation_id`); статус —
   `GET /api/v1/async-tasks/{task_id}`. По завершении в `data` появляются
   `path` (файл) и `edit_path` (редактор).
 - **Вебхуки**: `POST /api/v1/webhook/subscribe` (`url`, `secret`, `event`),
   события `presentation.generation.completed|failed`. Подписка привязана к
-  пользователю; доставка без ретраев — поллинг статуса обязателен как страховка.
+  пользователю; доставка с ретраями (`webhook_service.py`), но поллинг статуса
+  остаётся страховкой.
 - **Mini App**: отдельный лёгкий route в том же Next.js («форма → генерация →
   превью → файл»), ничего не импортирующий из редактора. Превью слайдов —
-  серверный рендер в PNG (HTTP-обёртка планируется).
+  серверный рендер в PNG (`api/v1/ppt/endpoints/slide_preview.py`, задача P3).
 - Файлы экспорта лежат в `app_data/exports/users/<user_id>/...`, доступ по
   сессионной куке; бот скачивает файл сессией пользователя и шлёт документом.
