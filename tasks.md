@@ -358,3 +358,19 @@ set_image_url/delete/duplicate/reorder_element с валидацией и ато
 **Готово когда.** `make check` зелёный; тесты: integration
 `test_deck_editor_api.py`, unit `test_deck_editor_service.py`, refresh-превью
 в `test_slide_preview_endpoints.py`. Детали — `docs/progress/P15-deck-editor-api.md`.
+
+### P16. Редакторские расширения для Mini App: undo-снимки, add_element, данные — ЗАКРЫТА
+
+**Цель.** Mini App canvas второго поколения: отмена/возврат, добавление
+элементов «с нуля», редактирование данных графиков/списков, rich-text.
+
+**Суть.** `PATCH /presentation/{id}/editor-state` — полная замена ui слайда
+(клиент хранит снимки ui из ответов); editor-view/editor-ops возвращают `ui`;
+новые editor-ops: `add_element` (text/image/rectangle) и `set_data`
+(text-list items, chart categories/series); `set_text` понимает
+`**жирный**`/`*курсив*`/`<latex>` — парсер разметки вынесен в
+`utils/template_text_runs.py` (был приватным в presentation.py); в
+editor-view появились `complex`-предпросмотры (списки/графики).
+
+**Готово когда.** fastapi 887 passed (unit/integration, в т.ч. HTTP
+add_element и editor-state), ruff чист. Детали — docs/tg/04-editor-api.md.
