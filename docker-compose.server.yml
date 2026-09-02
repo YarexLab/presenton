@@ -16,6 +16,8 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS}
       GENERATION_QUOTA_PER_DAY: ${GENERATION_QUOTA_PER_DAY}
+      # приватная панель: анонимная телеметрия выключена по умолчанию
+      DISABLE_ANONYMOUS_TRACKING: ${DISABLE_ANONYMOUS_TRACKING:-true}
       CAN_CHANGE_KEYS: "true"
       MIGRATE_DATABASE_ON_STARTUP: "true"
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
