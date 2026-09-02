@@ -4,19 +4,25 @@
 
 No active task.
 
-Последняя закрытая: P14 — обход HTTP 400 400001 от b.ai: флаг
-`LLM_STRUCTURED_OUTPUTS=false` (не слать `response_format`/`json_schema`,
-парсить JSON из текста; гейты в `get_generate_kwargs` и
-`templates/v2/generation.py`, толерантный `extract_structured_content`).
-Источник: инцидент 2026-09-01 (`docs/engine-response-format-issue.md`),
-задача в TASKS.md репо presenton. На сервере: выставить
-`LLM_STRUCTURED_OUTPUTS=false` в `.env` движка и перезапустить контейнер.
+Последняя закрытая: P15 — Telegram WebApp авто-логин в веб-редакторе
+(`components/Auth/AuthGate.tsx`): вход по initData через
+`POST /api/v1/auth/telegram` без пароля + возврат на исходную ссылку
+(редактор по ссылке из бота открывается без ручного логина). Контракт для
+бота: кнопка «Открыть в редакторе» должна быть web_app-кнопкой. Подробности
+в TASKS.md (P15).
 
-Ранее: P10 — ребрендинг Yarex + hardening внутренней админки
+Ранее: P14 — переход движка на DeepSeek (`LLM=deepseek`,
+`DEEPSEEK_MODEL=deepseek-v4-flash`): `LLM_STRUCTURED_OUTPUTS` вернуть к
+дефолту `true` (DeepSeek умеет structured outputs через tools в llmai),
+`DISABLE_THINKING=true` для скорости; промпт outline требует JSON +
+толерантный парсинг в эндпоинтах. Исходный флаг-фикс под b.ai остаётся в
+коде (`docs/engine-response-format-issue.md`).
+
+Ещё ранее: P10 — ребрендинг Yarex + hardening внутренней админки
 (servers/nextjs): видимый ребренд + иконки, рестайл purple→blue,
 телеметрия default off, регистрация закрыта по дизайну (setup 409).
 Подробности: docs/progress/P10-yarex-rebrand-admin.md.
 
-Ещё ранее: T-04 — cookie samesite=none+secure за https-прокси (десктоп-Telegram),
+И ранее: T-04 — cookie samesite=none+secure за https-прокси (десктоп-Telegram),
 мерж в main `c8c97f44`. Следующая связанная: T-09 — живой smoke против
 движка (ждёт сервера/домена; вайтлист testers вписан в .env движка).
