@@ -31,7 +31,8 @@ PRESENTATION_EDITOR_ROUTER = APIRouter(prefix="/presentation", tags=["Presentati
 
 class EditorOpModel(BaseModel):
     op: str
-    element_path: str
+    # не требуется для op=add_element (вставка нового элемента)
+    element_path: str | None = None
     # поля, общие для разных операций; валидируются в сервисе по типу op
     position: dict[str, float] | None = None
     size: dict[str, float] | None = None
@@ -39,6 +40,11 @@ class EditorOpModel(BaseModel):
     patch: dict[str, Any] | None = None
     url: str | None = None
     direction: str | None = None
+    # add_element
+    type: str | None = None
+    rect: dict[str, float] | None = None
+    # set_data
+    data: dict[str, Any] | None = None
     model_config = {"extra": "forbid"}
 
 

@@ -604,3 +604,27 @@ def test_editor_state_rejects_malformed_ui(stack):
         json={"slide_id": str(slide_ids[0]), "ui": {"content": {"title": "x"}}},
     )
     assert response.status_code == 422
+
+
+def test_editor_ops_add_element_over_http(stack):
+    client, _, session_maker = stack
+    deck_id, slide_ids = asyncio.run(_seed_deck(session_maker, owner_id=OWNER_ID))
+    response = client.patch(
+        f"/api/v1/ppt/presentation/{deck_id}/editor-ops",
+        json={
+            "slide_id": str(slide_ids[0]),
+            "ops": [
+                {
+                    "op": "add_element",
+                    "type": "text",
+                    "rect": {"x": 120, "y": 90, "width": 420, "height": 110},
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    added = [element for element in body["elements"] if element.get("name") == "text_added"]
+    assert len(added) == 1
+    assert added[0]["rect"] == {"x": 120, "y": 90, "width": 420, "height": 110}
+    assert body["ui"] is not None
