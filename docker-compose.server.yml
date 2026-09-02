@@ -3,8 +3,14 @@ name: yarex-presenton
 # Сервер yarexlab.ru: один контейнер движка, TLS на nginx хоста.
 # LLM-провайдер настраивается через веб-админку (Settings → Text Provider)
 # или напрямую в .env — следующие четыре переменные прокидывают её сюда.
+#
+# Деплой из CI (deploy.yml): образ пушится в ghcr.io/yarexlab/presenton с тегом
+# main-<sha>; на сервере YAREX_IMAGE_TAG=<тег> docker compose pull && up -d.
+# YAREX_IMAGE_TAG не задан -> берётся moving-тег main. Сборка на месте
+# (build:) остаётся как ручной fallback при недоступном GHCR.
 services:
   presenton:
+    image: ghcr.io/yarexlab/presenton:${YAREX_IMAGE_TAG:-main}
     build:
       context: .
       dockerfile: Dockerfile
