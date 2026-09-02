@@ -145,5 +145,43 @@ outline, web-search-запрос и т.д.), ни в `templates/v2/generation.py
 
 ---
 
+## Дополнение: переход на DeepSeek (2026-09-02)
+
+Сервер переведён с b.ai на DeepSeek (`LLM=deepseek`,
+`DEEPSEEK_MODEL=deepseek-v4-flash`). Выводы по факту:
+
+- **DeepSeek работает с `LLM_STRUCTURED_OUTPUTS=true` (дефолт)** — llmai для
+  DeepSeek не шлёт сырой `json_schema`, а конвертирует его в function tool
+  (DeepSeek поддерживает tool calls), и ответ приходит валидным JSON.
+  Проверено на реальном API: outline `{"slides": [...]}` парсится.
+  ⇒ Из `.env` на сервере строку `LLM_STRUCTURED_OUTPUTS=false` **убрать**
+  (вернуть дефолт `true`). Флаг оставлен в коде для провайдеров вроде b.ai,
+  которые `json_schema` отклоняют.
+- **Режим `false` требует JSON-инструкций в тексте промпта**: промпт outline
+  раньше не упоминал JSON («Must be in Markdown format») — при выключенном
+  `response_format` DeepSeek возвращал чистый Markdown, и эндпоинт падал
+  («Failed to generate presentation outlines»). Теперь промпт жёстко требует
+  голый JSON `{"slides": [{"content": ...}]}`, а оба outline-эндпоинта
+  парсят через `extract_structured_content` (фенсы/проза). Это же чинит
+  генерацию outline для любых провайдеров в режиме `false`.
+- **`DISABLE_THINKING=true` рекомендуется**: `deepseek-v4-flash` по умолчанию
+  думает (thinking mode) и на больших промптах (smart-дека) стримит минутами.
+  С выключенным thinking smart-генерация 2 слайдов заняла ~15 с.
+
+Итоговый `.env` движка:
+
+```bash
+LLM=deepseek
+DEEPSEEK_API_KEY=sk-...
+DEEPSEEK_MODEL=deepseek-v4-flash
+DISABLE_THINKING=true
+# LLM_STRUCTURED_OUTPUTS — не задавать (дефолт true)
+```
+
+Проверка: генерация из бота (outline → структура → контент → pptx) и smart-
+генерация на сайте без ошибок; в логах `POST https://api.deepseek.com/...`.
+
+---
+
 *Файл создан по факту инцидента 2026-09-01. Текст ошибки движка логируется
 ботом в `story_logs` автоматически (фича добавлена в yarex_lab_tg).*
