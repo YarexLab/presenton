@@ -332,7 +332,10 @@ def set_element_text(element: dict[str, Any], text: str) -> None:
         and (
             run.get("type") == "latex"
             or "latex" in run
-            or (isinstance(run.get("font"), dict) and bool(run["font"].get("bold") or run["font"].get("italic")))
+            or (
+                isinstance(run.get("font"), dict)
+                and bool(run["font"].get("bold") or run["font"].get("italic"))
+            )
         )
         for run in runs
     )
@@ -341,7 +344,6 @@ def set_element_text(element: dict[str, Any], text: str) -> None:
         element.pop("text", None)
     else:
         element["text"] = runs[0]["text"] if runs else text
-
 
 
 def apply_style_patch(element: dict[str, Any], patch: dict[str, Any]) -> None:
@@ -406,9 +408,7 @@ def _complex_preview_of(element: dict[str, Any]) -> dict[str, Any] | None:
         series = element.get("series")
         preview: dict[str, Any] = {"kind": "chart"}
         if isinstance(categories, list):
-            preview["categories"] = [
-                value for value in categories if isinstance(value, str)
-            ]
+            preview["categories"] = [value for value in categories if isinstance(value, str)]
         if isinstance(series, list):
             normalized_series = []
             for item in series:
@@ -461,8 +461,7 @@ def _target_elements_container(ui: dict[str, Any]) -> tuple[list[Any], bool]:
         if not isinstance(elements, list):
             continue
         has_editable = any(
-            isinstance(item, dict) and item.get("decorative") is not True
-            for item in elements
+            isinstance(item, dict) and item.get("decorative") is not True for item in elements
         )
         if has_editable:
             return elements, True
@@ -482,8 +481,10 @@ def _apply_add_element(ui: dict[str, Any], raw_op: dict[str, Any]) -> None:
     if element_type not in ADDABLE_ELEMENT_TYPES:
         raise ValueError(f"add_element type must be one of {sorted(ADDABLE_ELEMENT_TYPES)}")
     rect = raw_op.get("rect")
-    if not isinstance(rect, dict) or not isinstance(rect.get("width"), (int, float)) or not isinstance(
-        rect.get("height"), (int, float)
+    if (
+        not isinstance(rect, dict)
+        or not isinstance(rect.get("width"), (int, float))
+        or not isinstance(rect.get("height"), (int, float))
     ):
         rect = {
             "x": (SLIDE_STAGE_WIDTH - 340) / 2,
@@ -555,14 +556,22 @@ def _apply_complex_data(element: dict[str, Any], data: dict[str, Any]) -> None:
             raise ValueError("text-list data.items must be a list of strings")
         fallback_font = element.get("font")
         element["items"] = [
-            {"runs": [{"text": item, **(copy.deepcopy(fallback_font) if isinstance(fallback_font, dict) else {})}]}
+            {
+                "runs": [
+                    {
+                        "text": item,
+                        **(copy.deepcopy(fallback_font) if isinstance(fallback_font, dict) else {}),
+                    }
+                ]
+            }
             for item in items
         ]
         return
     if element_type == "chart":
         categories = data.get("categories")
         if categories is not None and (
-            not isinstance(categories, list) or not all(isinstance(item, str) for item in categories)
+            not isinstance(categories, list)
+            or not all(isinstance(item, str) for item in categories)
         ):
             raise ValueError("chart data.categories must be a list of strings")
         series = data.get("series")

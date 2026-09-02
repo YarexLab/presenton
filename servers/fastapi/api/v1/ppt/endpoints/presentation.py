@@ -497,6 +497,8 @@ GENERATED_TABLE_CELL_STROKE = {
     "opacity": 1,
     "width": 1,
 }
+
+
 def _template_component_content_keys(components: list[Any]) -> list[str]:
     ids: list[str] = []
     for index, component in enumerate(components):

@@ -328,9 +328,7 @@ def test_apply_ops_set_data_text_list():
         ui, [{"op": "set_data", "element_path": path, "data": {"items": ["один", "два"]}}]
     )
     raw = next(
-        element
-        for element in ui["components"][0]["elements"]
-        if element.get("type") == "text-list"
+        element for element in ui["components"][0]["elements"] if element.get("type") == "text-list"
     )
     assert [item["runs"][0]["text"] for item in raw["items"]] == ["один", "два"]
 
