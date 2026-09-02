@@ -96,12 +96,33 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          # down перед up: recreate-гонка docker-proxy («port is already
+          # allocated») ловилась дважды подряд; full teardown + ретраи up
+          # её снимают. Внешняя сеть yarex-net при down не удаляется.
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
-            "$SSH_USER@$SSH_HOST" \
-            "cd '$DEPLOY_PATH' && \
-             git pull --ff-only && \
-             YAREX_IMAGE_TAG='$IMAGE_TAG' docker compose -f docker-compose.server.yml pull presenton && \
-             YAREX_IMAGE_TAG='$IMAGE_TAG' docker compose -f docker-compose.server.yml up -d --no-build"
+            "$SSH_USER@$SSH_HOST" DEPLOY_PATH="$DEPLOY_PATH" IMAGE_TAG="$IMAGE_TAG" 'bash -s' <<'REMOTE'
+          set -e
+          cd "$DEPLOY_PATH"
+          git pull --ff-only
+          echo "--- containers holding :50521 before deploy ---"
+          docker ps -a --filter publish=50521 --format '{{.Names}} {{.Image}} {{.Status}}' || true
+          YAREX_IMAGE_TAG="$IMAGE_TAG" docker compose -f docker-compose.server.yml pull presenton
+          docker compose -f docker-compose.server.yml down --remove-orphans
+          ok=0
+          for i in 1 2 3; do
+            if YAREX_IMAGE_TAG="$IMAGE_TAG" docker compose -f docker-compose.server.yml up -d --no-build; then
+              ok=1
+              break
+            fi
+            echo "up attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          if [ "$ok" != 1 ]; then
+            echo "--- still failing; containers on :50521 ---" >&2
+            docker ps -a --filter publish=50521 --format '{{.Names}} {{.Image}} {{.Status}}' >&2
+            exit 1
+          fi
+          REMOTE
 
       - name: Smoke check
         env:
