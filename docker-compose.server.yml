@@ -16,6 +16,14 @@ services:
       dockerfile: Dockerfile
     container_name: presenton
     restart: unless-stopped
+    # Ротация логов контейнера (собираются в Loki агентом мониторинга,
+    # но json-файлы на хосте остаются fallback'ом). Без лимитов Docker
+    # пишет без ограничений — диск со временем закончится.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     ports:
       - "127.0.0.1:50521:80"
     environment:
