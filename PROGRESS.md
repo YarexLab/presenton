@@ -4,6 +4,13 @@
 
 No active task.
 
+Последняя закрытая: M1 — подготовка репо к мониторинг-стеку (ветка
+`chore/monitoring-prep`): ротация docker-логов в `docker-compose.server.yml`
+(json-file, max-size 10m / max-file 5) и контракт наблюдаемости
+`docs/monitoring.md` для репо `yarex_monitoring` (stdout-логи, LOG_LEVEL,
+SENTRY_DSN, smoke, имена контейнеров). Код приложений не менялся — движок уже
+логирует в stdout. Подробности: docs/progress/M1-monitoring-prep.md.
+
 Последняя закрытая: P16 (M4, движковая часть) — editor-state (undo/redo),
 op add_element (text/image/rectangle), op set_data (text-list/chart), rich
 text-разметка **/*/<latex> в set_text, ui и complex-предпросмотр в
