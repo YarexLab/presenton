@@ -1,15 +1,19 @@
-name: Deploy
-
 # C1 (tasks.md): кнопка в Actions -> build образа текущего main ->
 # ghcr.io/yarexlab/presenton, деплой на сервер по SSH (git pull + compose
-# pull + up -d), post-deploy smoke, чистка старых образов.
+# pull + up -d сервиса production), post-deploy smoke, чистка старых образов.
 # Автозапуска нет — только вручную.
+#
+# На сервере движок живёт как сервис `production` из корневого
+# docker-compose.yml + docker-compose.override.yml (image: ghcr-образа).
+# Кнопка перезаписывает override актуальным тегом и пересоздаёт контейнер
+# yarex_presenton-production-1 (данные — в хостовом ./app_data, env — из .env),
+# затем возвращает боту DNS-алиас presenton в сети yarex-lab-tg_default.
 #
 # Требуемые secrets (Settings -> Secrets and variables -> Actions):
 #   DEPLOY_SSH_HOST - хост сервера (yarexlab.ru)
 #   DEPLOY_SSH_USER - пользователь SSH на сервере
 #   DEPLOY_SSH_KEY  - приватный ключ (ed25519), authorized_keys на сервере
-#   DEPLOY_PATH     - каталог репо на сервере с docker-compose.server.yml
+#   DEPLOY_PATH     - каталог репо на сервере с docker-compose.yml
 #
 # Разовая настройка сервера: docker login ghcr.io (PAT с read:packages),
 # т.к. пакет приватный. Либо сделать пакет public — тогда логин не нужен.
@@ -96,21 +100,24 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # down перед up: recreate-гонка docker-proxy («port is already
-          # allocated») ловилась дважды подряд; full teardown + ретраи up
-          # её снимают. Внешняя сеть yarex-net при down не удаляется.
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
-            "$SSH_USER@$SSH_HOST" DEPLOY_PATH="$DEPLOY_PATH" IMAGE_TAG="$IMAGE_TAG" 'bash -s' <<'REMOTE'
+          # Полный teardown проекта перед up: recreate-гонка docker-proxy
+          # («port is already allocated») ловилась дважды подряд; full
+          # teardown + ретраи up её снимают. Внешние сети (yarex-lab-tg_default)
+          # при down не удаляются. Чужой контейнер server-схемы (presenton)
+          # убираем на всякий случай.
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new             "$SSH_USER@$SSH_HOST" DEPLOY_PATH="$DEPLOY_PATH" IMAGE_TAG="$IMAGE_TAG" 'bash -s' <<'REMOTE'
           set -e
           cd "$DEPLOY_PATH"
           git pull --ff-only
+          docker rm -f presenton 2>/dev/null || true
           echo "--- containers holding :50521 before deploy ---"
           docker ps -a --filter publish=50521 --format '{{.Names}} {{.Image}} {{.Status}}' || true
-          YAREX_IMAGE_TAG="$IMAGE_TAG" docker compose -f docker-compose.server.yml pull presenton
-          docker compose -f docker-compose.server.yml down --remove-orphans
+          docker compose down --remove-orphans || true
+          printf 'services:\n  production:\n    image: ghcr.io/yarexlab/presenton:%s\n' "$IMAGE_TAG" > docker-compose.override.yml
+          docker compose pull production
           ok=0
           for i in 1 2 3; do
-            if YAREX_IMAGE_TAG="$IMAGE_TAG" docker compose -f docker-compose.server.yml up -d --no-build; then
+            if docker compose up -d --no-build production; then
               ok=1
               break
             fi
@@ -122,6 +129,9 @@ jobs:
             docker ps -a --filter publish=50521 --format '{{.Names}} {{.Image}} {{.Status}}' >&2
             exit 1
           fi
+          # бот ходит на движок по DNS-имени presenton в своей сети
+          docker network disconnect yarex-lab-tg_default yarex_presenton-production-1 2>/dev/null || true
+          docker network connect yarex-lab-tg_default yarex_presenton-production-1 --alias presenton
           REMOTE
 
       - name: Smoke check
