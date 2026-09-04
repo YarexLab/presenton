@@ -4,6 +4,12 @@
 
 No active task.
 
+Последняя закрытая: CI deploy.yml — ротация образов presenton: после build
+удаляются версии пакета ghcr.io/yarexlab/presenton кроме 10 последних
+(GHCR API, continue-on-error), в «Prune old images on server» добавлены
+docker builder prune (старше 7 дней) и docker system df в лог. make check
+exit 0. Ветка chore/ci-image-cleanup.
+
 Последняя закрытая: M1 — подготовка репо к мониторинг-стеку (ветка
 `chore/monitoring-prep`): ротация docker-логов в `docker-compose.server.yml`
 (json-file, max-size 10m / max-file 5) и контракт наблюдаемости

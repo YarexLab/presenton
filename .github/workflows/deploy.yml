@@ -77,6 +77,31 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Delete old GHCR versions (keep 10 newest)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Ротация в реестре: держим последние 10 версий пакета (запас для
+          # отката), старые main-<sha> удаляем — образ движка тяжёлый,
+          # без ротации GHCR раздувается особенно быстро.
+          # Неудача чистки не должна ронять деплой.
+          PKG="presenton"
+          OWNER="${GITHUB_REPOSITORY%%/*}"
+          set +e
+          if IDS=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/orgs/$OWNER/packages/container/$PKG/versions?per_page=100" \
+              | jq -r 'sort_by(.created_at) | reverse | .[10:][] | .id' \
+              ) && [ -n "$IDS" ]; then
+            for id in $IDS; do
+              curl -sf -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/orgs/$OWNER/packages/container/$PKG/versions/$id" \
+                || echo "не удалось удалить версию $id"
+            done
+          else
+            echo "нет старых версий (или орг-API недоступен) — пропуск"
+          fi
+        continue-on-error: true
+
   deploy:
     name: Deploy to yarexlab.ru
     runs-on: ubuntu-latest
@@ -165,12 +190,15 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # старые тегированные версии main-<sha>, кроме текущей + висячие слои;
-          # неудача чистки не роняет деплой
+          # старые тегированные версии main-<sha>, кроме текущей + висячие слои
+          # + кэш сборки старше 7 дней; неудача чистки не роняет деплой
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
-            "$SSH_USER@$SSH_HOST" \
-            "docker images --format '{{.Repository}}:{{.Tag}}' \
-               | grep '^ghcr.io/yarexlab/presenton:main-' \
-               | grep -v ':${IMAGE_TAG}' \
-               | xargs -r docker rmi || true; \
-             docker image prune -f"
+            "$SSH_USER@$SSH_HOST" IMAGE_TAG="$IMAGE_TAG" 'bash -s' <<'REMOTE'
+          docker images --format '{{.Repository}}:{{.Tag}}' \
+            | grep '^ghcr.io/yarexlab/presenton:main-' \
+            | grep -v ":$IMAGE_TAG" \
+            | xargs -r docker rmi || true
+          docker image prune -f
+          docker builder prune -f --filter "until=168h" || true
+          docker system df || true
+          REMOTE
