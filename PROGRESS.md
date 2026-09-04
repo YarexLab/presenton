@@ -4,6 +4,20 @@
 
 No active task.
 
+Последняя закрытая: PPTX-экспорт — SVG-иконки без растрового fallback
+(«Не удалось отобразить рисунок» в PowerPoint-вьюверах). Диагноз по реальным
+файлам прода: `<a:blip>` без `r:embed`, только svgBlip-ext; дефект в
+@presenton/export-core (все версии 1.0.14–1.0.26 вырезают r:embed при
+native-svg патче). Фикс на нашей стороне: scripts/pptx-svg-fallback.mjs —
+после runTask каждому svg-only blip'у добавляется PNG-копия SVG (sharp из
+deps export-core, density под размер, кэш, идемпотентно, сбой растеризации
+одной иконки файл не роняет; PDF не трогается). Вызов в раннере только для
+type=export и .pptx. Тесты: 6 кейсов (fallback, идемпотентность, нетронутые
+blip'ы, сбой растеризации, slideLayouts). Проверено на реальном битом файле
+прода: 28/28 svg-blip починены, 0 битых media-ссылок, zip/XML валидны.
+make check exit 0 (ruff + tsc + 888 pytest + npm test). Ветка
+fix/pptx-svg-fallback.
+
 Последняя закрытая: CI deploy.yml — ротация образов presenton: после build
 удаляются версии пакета ghcr.io/yarexlab/presenton кроме 10 последних
 (GHCR API, continue-on-error), в «Prune old images on server» добавлены
