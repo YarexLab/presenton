@@ -4,6 +4,7 @@ import json
 import logging
 import random
 import re
+import time
 import traceback
 import uuid
 from datetime import datetime
@@ -2331,6 +2332,20 @@ async def generate_presentation_handler(
                 raise asyncio.CancelledError
 
         await raise_if_client_disconnected()
+        # duration-логи стадий: на живом стенде видно, где именно буксует
+        # (LLM-конвейер / иконки-картинки / Chromium-экспорт)
+        stage_clock = time.monotonic()
+
+        def log_stage_done(name: str) -> None:
+            nonlocal stage_clock
+            logger.info(
+                "[presentation.generate] stage=%s done duration_s=%.1f presentation_id=%s",
+                name,
+                time.monotonic() - stage_clock,
+                presentation_id,
+            )
+            stage_clock = time.monotonic()
+
         using_slides_markdown = False
         language_to_use = (request.language or "").strip() or None
         additional_context = ""
@@ -2474,6 +2489,7 @@ async def generate_presentation_handler(
             presentation_id,
             presentation_outlines.model_dump(mode="json"),
         )
+        log_stage_done("outline")
 
         # Updating async status
         if async_status:
@@ -2549,6 +2565,8 @@ async def generate_presentation_handler(
                     n_toc_slides=n_toc_slides,
                     title_slide=request.include_title_slide,
                 )
+
+        log_stage_done("structure")
 
         final_n_slides = request.n_slides
         if final_n_slides is None:
@@ -2669,6 +2687,7 @@ async def generate_presentation_handler(
             ]
             async_assets_generation_tasks.extend(asset_tasks)
 
+        log_stage_done("slides")
         if async_status:
             async_status.message = "Fetching assets for slides"
             async_status.data = _presentation_task_progress_data(
@@ -2692,6 +2711,7 @@ async def generate_presentation_handler(
                 warning.get("detail"),
             )
 
+        log_stage_done("assets")
         for slide in slides:
             _hydrate_template_slide_ui(slide, layout_payload)
 
@@ -2714,6 +2734,7 @@ async def generate_presentation_handler(
             cookie_header=export_cookie_header,
         )
 
+        log_stage_done("export")
         response = PresentationPathAndEditPath(
             **presentation_and_path.model_dump(),
             edit_path=f"/presentation?id={presentation_id}",

@@ -247,3 +247,34 @@ def test_foreign_presentation_is_not_found(monkeypatch, tmp_path):
         == 404
     )
     asyncio.run(engine.dispose())
+
+
+def test_preview_render_lock_is_shared_per_presentation():
+    """In-flight дедупликация: второй /preview по той же деке ждёт рендер,
+    по другой деке — рендерит независимо (не терпит общий lock)."""
+
+    async def scenario():
+        first = uuid.uuid4()
+        second = uuid.uuid4()
+
+        lock_a1 = await slide_preview._preview_render_lock(first)
+        lock_a2 = await slide_preview._preview_render_lock(first)
+        lock_b = await slide_preview._preview_render_lock(second)
+        assert lock_a1 is lock_a2
+        assert lock_b is not lock_a1
+
+        entered = asyncio.Event()
+
+        async def second_call():
+            async with lock_a2:
+                entered.set()
+
+        async with lock_a1:
+            task = asyncio.create_task(second_call())
+            await asyncio.sleep(0.01)
+            # первый ещё рендерит — второй ждёт, не запуская параллельный рендер
+            assert not entered.is_set()
+        await asyncio.wait_for(task, 1)
+        assert entered.is_set()
+
+    asyncio.run(scenario())
