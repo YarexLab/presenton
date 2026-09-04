@@ -69,6 +69,28 @@ def _preview_directory(presentation_id: uuid.UUID) -> str:
     return directory
 
 
+# In-flight дедупликация рендера: параллельные POST /preview по одной деке
+# дожидаются идущего рендера, а не запускают параллельный Chromium (Node+
+# Puppeteer). Без этого ручные обновления и поллинг штамповали по несколько
+# рендеров одновременно — шторм CPU на VPS тормозил одновременные генерации.
+_PREVIEW_RENDER_LOCKS: dict[uuid.UUID, asyncio.Lock] = {}
+_PREVIEW_LOCKS_GUARD = asyncio.Lock()
+
+
+async def _preview_render_lock(presentation_id: uuid.UUID) -> asyncio.Lock:
+    """Общий lock рендера превью на деку (одна запись — много ждунов).
+
+    Записи в словаре не чистим: их число ограничено числом дек, а попытка
+    «удалить свободный lock» гоняется с ждуном, взявшим его из словаря.
+    """
+    async with _PREVIEW_LOCKS_GUARD:
+        lock = _PREVIEW_RENDER_LOCKS.get(presentation_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _PREVIEW_RENDER_LOCKS[presentation_id] = lock
+        return lock
+
+
 def _cached_previews(directory: str, pptx_fs_path: str) -> list[str] | None:
     """Готовые PNG, если PPTX не новее их — рендер это запуск Chromium."""
     try:
@@ -104,38 +126,41 @@ async def render_slide_previews(
     if presentation is None:
         raise HTTPException(status_code=404, detail="Presentation not found")
 
-    if body and body.pptx_path and not body.refresh:
-        pptx_fs_path = _resolve_owned_pptx(body.pptx_path)
-    else:
-        exported = await export_presentation(
-            presentation.id,
-            presentation.title or str(uuid.uuid4()),
-            "pptx",
-            cookie_header=_build_export_cookie_header(request),
-        )
-        pptx_fs_path = exported.path
+    # параллельные вызовы по одной деке — один рендер (см. комментарий выше)
+    render_lock = await _preview_render_lock(id)
+    async with render_lock:
+        if body and body.pptx_path and not body.refresh:
+            pptx_fs_path = _resolve_owned_pptx(body.pptx_path)
+        else:
+            exported = await export_presentation(
+                presentation.id,
+                presentation.title or str(uuid.uuid4()),
+                "pptx",
+                cookie_header=_build_export_cookie_header(request),
+            )
+            pptx_fs_path = exported.path
 
-    preview_dir = _preview_directory(presentation.id)
-    png_paths = None if body and body.refresh else _cached_previews(preview_dir, pptx_fs_path)
-    if png_paths is None:
-        # Число слайдов могло уменьшиться — старые файлы удаляем до рендера.
-        for stale in os.listdir(preview_dir):
-            if stale.endswith(".png"):
-                os.remove(os.path.join(preview_dir, stale))
-        # ponytail: кастомные шрифты в превью не подтягиваем (пустой список);
-        # добавить font_paths_for_install, когда попросит разработчик Mini App.
-        rendered = await render_pptx_slides_to_images(
-            pptx_fs_path,
-            font_paths_for_install=[],
-            max_slides=None,
-            logger=LOGGER,
-        )
-        png_paths = []
-        for index, source in enumerate(rendered, start=1):
-            destination = os.path.join(preview_dir, f"slide-{index}.png")
-            shutil.copyfile(source, destination)
-            os.chmod(destination, 0o644)
-            png_paths.append(destination)
+        preview_dir = _preview_directory(presentation.id)
+        png_paths = None if body and body.refresh else _cached_previews(preview_dir, pptx_fs_path)
+        if png_paths is None:
+            # Число слайдов могло уменьшиться — старые файлы удаляем до рендера.
+            for stale in os.listdir(preview_dir):
+                if stale.endswith(".png"):
+                    os.remove(os.path.join(preview_dir, stale))
+            # ponytail: кастомные шрифты в превью не подтягиваем (пустой список);
+            # добавить font_paths_for_install, когда попросит разработчик Mini App.
+            rendered = await render_pptx_slides_to_images(
+                pptx_fs_path,
+                font_paths_for_install=[],
+                max_slides=None,
+                logger=LOGGER,
+            )
+            png_paths = []
+            for index, source in enumerate(rendered, start=1):
+                destination = os.path.join(preview_dir, f"slide-{index}.png")
+                shutil.copyfile(source, destination)
+                os.chmod(destination, 0o644)
+                png_paths.append(destination)
 
     width, height = await asyncio.to_thread(_preview_dimensions_from_pptx, pptx_fs_path)
     return SlidePreviewResponse(

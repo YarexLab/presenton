@@ -10,6 +10,17 @@ No active task.
 docker builder prune (старше 7 дней) и docker system df в лог. make check
 exit 0. Ветка chore/ci-image-cleanup.
 
+Последняя закрытая: `/preview` — in-flight дедупликация на presentation_id
+(модульный dict `asyncio.Lock`): параллельные POST по одной деке дожидаются
+идущего рендера вместо запуска параллельного Chromium — без этого ручные
+обновления из Mini App штамповали по несколько рендеров, и шторм CPU на VPS
+тормозил одновременные генерации («раньше 1–5 минут, сейчас больше 15»).
+Плюс duration-логи стадий конвейера генерации (outline/structure/slides/
+assets/export) в generate-хендлере: `stage=<name> done duration_s=<t>` — на
+живом стенде видно, где именно буксует. Тест: preview-lock сериализуется по
+деке и независим между деками. make check: ruff + 888 pytest + npm test,
+exit 0. Ветка fix/preview-inflight-lock.
+
 Последняя закрытая: M1 — подготовка репо к мониторинг-стеку (ветка
 `chore/monitoring-prep`): ротация docker-логов в `docker-compose.server.yml`
 (json-file, max-size 10m / max-file 5) и контракт наблюдаемости
