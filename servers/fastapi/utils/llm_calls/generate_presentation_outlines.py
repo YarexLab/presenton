@@ -21,6 +21,7 @@ from utils.llm_config import get_llm_config
 from utils.llm_provider import get_model
 from utils.llm_utils import (
     DisconnectChecker,
+    _is_json_parse_failure,
     get_generate_kwargs,
     serialize_structured_content,
     stream_generate_events,
@@ -362,35 +363,50 @@ async def generate_ppt_outline(
             strict=False,
         )
         emitted_content = False
-        async for event in stream_generate_events(
-            client,
-            disconnect_checker=disconnect_checker,
-            **get_generate_kwargs(
-                model=model,
-                messages=get_messages(
-                    content,
-                    n_slides,
-                    language,
-                    additional_context,
-                    tone,
-                    verbosity,
-                    instructions,
-                    include_title_slide,
-                    include_table_of_contents,
+        try:
+            async for event in stream_generate_events(
+                client,
+                disconnect_checker=disconnect_checker,
+                **get_generate_kwargs(
+                    model=model,
+                    messages=get_messages(
+                        content,
+                        n_slides,
+                        language,
+                        additional_context,
+                        tone,
+                        verbosity,
+                        instructions,
+                        include_title_slide,
+                        include_table_of_contents,
+                    ),
+                    response_format=response_format,
+                    tools=([WebSearchTool()] if use_search_tool else None),
+                    stream=True,
                 ),
-                response_format=response_format,
-                tools=([WebSearchTool()] if use_search_tool else None),
-                stream=True,
-            ),
-        ):
-            if getattr(event, "type", None) == "content":
-                chunk = getattr(event, "chunk", None)
-                if chunk:
-                    emitted_content = True
-                    yield chunk
-            elif isinstance(event, ResponseStreamCompletionChunk) and not emitted_content:
-                final_content = serialize_structured_content(event.content)
-                if final_content:
-                    yield final_content
+            ):
+                if getattr(event, "type", None) == "content":
+                    chunk = getattr(event, "chunk", None)
+                    if chunk:
+                        emitted_content = True
+                        yield chunk
+                elif isinstance(event, ResponseStreamCompletionChunk) and not emitted_content:
+                    final_content = serialize_structured_content(event.content)
+                    if final_content:
+                        yield final_content
+        except Exception as error:
+            if not _is_json_parse_failure(error):
+                raise
+            # llmai жёстко парсит финальный контент при JSONSchemaResponse и
+            # роняет JSONDecodeError (обёрнутый в LLMError), хотя дельты
+            # контента уже yield'нуты выше. Гасим ошибку и просто завершаем
+            # стрим: коллектор (collect_presentation_outlines) tolerant-парсит
+            # накопленный текст; пустой текст -> штатный transient-ретрай.
+            # Прочие классы (disconnect, 429/5xx) идут в общий обработчик.
+            LOGGER.warning(
+                "[llm.parse] provider returned non-JSON outline final content "
+                "(%s); keeping already streamed chunks",
+                error,
+            )
     except Exception as e:
         yield handle_llm_client_exceptions(e)
