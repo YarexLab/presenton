@@ -2420,23 +2420,41 @@ async def generate_presentation_handler(
             )
 
             presentation_outlines_text = ""
-            async for chunk in generate_ppt_outline(
-                request.content,
-                n_slides_to_generate,
-                language_to_use,
-                additional_context,
-                request.tone.value,
-                request.verbosity.value,
-                request.instructions,
-                request.include_title_slide,
-                request.web_search,
-                request.include_table_of_contents,
-                disconnect_checker=disconnect_checker,
-            ):
-                if isinstance(chunk, HTTPException):
-                    raise chunk
 
-                presentation_outlines_text += chunk
+            async def collect_outline() -> str:
+                text = ""
+                async for chunk in generate_ppt_outline(
+                    request.content,
+                    n_slides_to_generate,
+                    language_to_use,
+                    additional_context,
+                    request.tone.value,
+                    request.verbosity.value,
+                    request.instructions,
+                    request.include_title_slide,
+                    request.web_search,
+                    request.include_table_of_contents,
+                    disconnect_checker=disconnect_checker,
+                ):
+                    if isinstance(chunk, HTTPException):
+                        raise chunk
+                    text += chunk
+                return text
+
+            try:
+                presentation_outlines_text = await collect_outline()
+            except HTTPException as error:
+                # апстрим-провайдер flaky: один ретрай на 429/5xx, прочие
+                # ошибки (в т.ч. disconnect) идут наверх без повторов
+                if error.status_code == 429 or error.status_code >= 500:
+                    logger.warning(
+                        "[presentation.generate] outline upstream error (%s), retrying once",
+                        error.detail,
+                    )
+                    await asyncio.sleep(2)
+                    presentation_outlines_text = await collect_outline()
+                else:
+                    raise
 
             # Tolerant parse: models without structured outputs may wrap the
             # JSON in markdown fences or add prose around it.

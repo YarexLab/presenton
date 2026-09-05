@@ -2,7 +2,13 @@
 
 ## Активная задача
 
-No active task.
+Прод-инцидент по логам бота: (1) экспорт падает ERR_MODULE_NOT_FOUND —
+runner импортирует ./pptx-svg-fallback.mjs, а Dockerfile файл в образ не
+копирует; (2) апстрим Sail Research отдаёт «response_format violated» на
+слайде — вся генерация умирает без ретрая. Фиксы: живучий импорт в раннере
++ COPY модуля в образ и sync; ретрай upstream schema-нарушений в
+generate_structured_with_schema_retries (+ один ретрай outline на 429/5xx).
+Ветка fix/export-deploy-and-llm-retry.
 
 Последняя закрытая: PPTX-экспорт — SVG-иконки без растрового fallback
 («Не удалось отобразить рисунок» в PowerPoint-вьюверах). Диагноз по реальным
