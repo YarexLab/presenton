@@ -350,6 +350,43 @@ def get_llm_reasoning_budget_tokens_env():
     return os.getenv("LLM_REASONING_BUDGET_TOKENS")
 
 
+_DEFAULT_SLIDE_LLM_CONCURRENCY = 10
+_MAX_SLIDE_LLM_CONCURRENCY = 50
+_DEFAULT_LLM_SLOW_CALL_WARN_SEC = 30.0
+
+
+def get_slide_llm_concurrency() -> int:
+    """Максимум одновременных LLM-вызовов контента слайдов на одну генерацию.
+
+    Раньше слайды шли последовательными батчами по 10; семафор с этим лимитом
+    даёт тот же потолок параллелизма без барьера между батчами.
+    """
+    raw = (os.getenv("SLIDE_LLM_CONCURRENCY") or "").strip()
+    if not raw:
+        return _DEFAULT_SLIDE_LLM_CONCURRENCY
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return _DEFAULT_SLIDE_LLM_CONCURRENCY
+    return max(1, min(parsed, _MAX_SLIDE_LLM_CONCURRENCY))
+
+
+def get_llm_slow_call_warn_seconds() -> float:
+    """Порог (в секундах) для warning-лога одного медленного LLM-вызова.
+
+    0 отключает проверку. Нужен для живого стенда: стадия slides в основном
+    ждёт провайдера, и единичные долгие вызовы видны только так.
+    """
+    raw = (os.getenv("LLM_SLOW_CALL_WARN_SEC") or "").strip()
+    if not raw:
+        return _DEFAULT_LLM_SLOW_CALL_WARN_SEC
+    try:
+        parsed = float(raw)
+    except ValueError:
+        return _DEFAULT_LLM_SLOW_CALL_WARN_SEC
+    return max(0.0, parsed)
+
+
 def get_web_grounding_env():
     return os.getenv("WEB_GROUNDING")
 
