@@ -5,6 +5,7 @@ from llmai.shared import JSONSchemaResponse, Message, SystemMessage, UserMessage
 
 from models.presentation_layout import SlideLayoutModel
 from models.sql.slide import SlideModel
+from utils.content_quality import get_content_quality_errors
 from utils.llm_client_error_handler import handle_llm_client_exceptions
 from utils.llm_config import get_llm_config
 from utils.llm_provider import get_model
@@ -161,6 +162,9 @@ async def get_edited_slide_content(
             json_schema=response_schema,
             strict=False,
             validate_schema=True,
+            content_validator=lambda content: get_content_quality_errors(
+                response_schema, content
+            ),
         )
 
     except Exception as e:

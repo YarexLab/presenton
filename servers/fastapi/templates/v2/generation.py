@@ -173,6 +173,7 @@ Convert the provided raw slide elements to components.
 - Before choosing `max_children`, calculate the maximum footprint. For a row, `sum(item widths) + sum(gaps)` must fit the parent width; perform the equivalent check for columns and every grid row/column. If the source declares a larger maximum than the current geometry fits, reduce item size or gaps, enlarge the parent within available space, or lower `max_children` to the real visual capacity.
 - Check both extremes: the minimum count must remain balanced and connected to the correct scaffolding, while the maximum count must preserve readable spacing and stay inside its component.
 - Size every editable text frame for its declared `max_length`, using realistic wide words rather than assuming the original copy is representative. Give subtitles, descriptions, and large emphasized text blocks enough height for their maximum wrapped line count. Give large metrics enough width for the widest allowed value.
+- Never author editable text below 12px, and keep body, description, and caption text at 14px or larger; use smaller fonts only for rare fine-print badges. When content does not fit its frame, reduce the text, grow the frame, or lower the schema limit — do not shrink the font. The renderer enforces a 12px floor anyway, so undersized fonts only break the design.
 - Preserve the reference font and placement when possible. If maximum content does not fit, first use available width/height in the component, then adjust layout spacing; lower the schema limit only when the design has no safe room. Do not silently rely on clipping.
 - Use `rotation=0` for text that is visually unrotated in the reference, even if raw extraction reports a tiny or erroneous rotation.
 
@@ -829,7 +830,7 @@ def generate_slide_layout(
         validation_retries=DEFAULT_VALIDATION_RETRIES,
         max_tokens=max_tokens,
     )
-    return _replace_content_image_urls(layout)
+    return _enforce_minimum_font_sizes(_replace_content_image_urls(layout))
 
 
 def generate_prompted_slide_layout(
@@ -890,7 +891,9 @@ def generate_prompted_slide_layout(
         extra_validator=validate_generated_layout,
         max_tokens=16_000,
     )
-    return _replace_content_image_urls(SlideLayout.model_validate(generated))
+    return _enforce_minimum_font_sizes(
+        _replace_content_image_urls(SlideLayout.model_validate(generated))
+    )
 
 
 def _prompted_layout_context(
@@ -992,6 +995,68 @@ def _replace_content_image_urls(layout: SlideLayout) -> SlideLayout:
     for component in normalized.components:
         _replace_content_image_urls_in_elements(component.elements)
     return normalized
+
+
+#: Пол размеров шрифта при авторинге шаблонов. Рендер
+#: (template-v2-json-to-html.ts) применяет тот же пол на выдаче; здесь мы
+#: фиксируем его в сохраняемом шаблоне, чтобы превью совпадало с экспортом.
+#: На уровне Font-модели пол не ставим: она парсит и сохранённые шаблоны
+#: старых дек, жёсткий reject сломал бы их загрузку.
+MIN_TEMPLATE_FONT_SIZE_PX = 12.0
+
+
+def _enforce_minimum_font_sizes(layout: SlideLayout) -> SlideLayout:
+    normalized = layout.model_copy(deep=True)
+    for component in normalized.components:
+        _enforce_minimum_font_sizes_in_elements(component.elements)
+    return normalized
+
+
+def _enforce_minimum_font_sizes_in_elements(elements: list[Any]) -> None:
+    for element in elements:
+        _enforce_minimum_font_size_in_element(element)
+
+
+def _bump_element_font(element: Any) -> None:
+    minimum = MIN_TEMPLATE_FONT_SIZE_PX
+    font = getattr(element, "font", None)
+    if font is not None and font.size is not None and font.size < minimum:
+        font.size = minimum
+    runs = getattr(element, "runs", None)
+    if isinstance(runs, list):
+        for run in runs:
+            run_font = getattr(run, "font", None)
+            if run_font is not None and run_font.size is not None and run_font.size < minimum:
+                run_font.size = minimum
+
+
+def _enforce_minimum_font_size_in_element(element: Any) -> None:
+    _bump_element_font(element)
+
+    child = getattr(element, "child", None)
+    if child is not None:
+        _enforce_minimum_font_size_in_element(child)
+
+    children = getattr(element, "children", None)
+    if isinstance(children, list):
+        _enforce_minimum_font_sizes_in_elements(children)
+
+    columns = getattr(element, "columns", None)
+    if isinstance(columns, list):
+        _enforce_minimum_font_sizes_in_elements(columns)
+
+    rows = getattr(element, "rows", None)
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, list):
+                _enforce_minimum_font_sizes_in_elements(row)
+
+    items = getattr(element, "items", None)
+    if isinstance(items, list):
+        for item in items:
+            if isinstance(item, list):
+                for run in item:
+                    _bump_element_font(run)
 
 
 def _replace_content_image_urls_in_elements(elements: list[Any]) -> None:
