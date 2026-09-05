@@ -2,13 +2,25 @@
 
 ## Активная задача
 
-Прод-инцидент по логам бота: (1) экспорт падает ERR_MODULE_NOT_FOUND —
-runner импортирует ./pptx-svg-fallback.mjs, а Dockerfile файл в образ не
-копирует; (2) апстрим Sail Research отдаёт «response_format violated» на
-слайде — вся генерация умирает без ретрая. Фиксы: живучий импорт в раннере
-+ COPY модуля в образ и sync; ретрай upstream schema-нарушений в
+Генерация презентаций дольше 10 минут при загрузке CPU 20–30%: конвейер
+I/O-bound (ожидание LLM-провайдера), CPU не при чём. Узкие места: (1) слайды
+генерируются последовательными батчами по 10 — деки больше батча
+сериализуются; (2) 429/5xx от провайдера на слайдовых вызовах не ретраятся —
+один flaky-ответ валит генерацию. Фиксы: семафор `SLIDE_LLM_CONCURRENCY`
+(default 10) вместо барьера батчей + прогресс по слайду через
+reporter-задачу (общая AsyncSession не трогается из параллельных задач);
+ретрай 429/5xx в `generate_structured_with_schema_retries` (экспоненциальные
+паузы, отдельный от schema-violation счётчик); warning-лог медленного
+LLM-вызова `LLM_SLOW_CALL_WARN_SEC` (default 30). Ветка
+perf/parallel-slide-llm.
+
+Последняя закрытая: P17 — прод-инцидент: экспорт падает ERR_MODULE_NOT_FOUND
+(runner импортирует ./pptx-svg-fallback.mjs, Dockerfile не копирнул модуль
+в образ) + апстрим Sail Research «response_format violated» на слайде валил
+генерацию без ретрая. Фиксы: живучий импорт в раннере + COPY модуля в образ
+и sync; ретрай upstream schema-нарушений в
 generate_structured_with_schema_retries (+ один ретрай outline на 429/5xx).
-Ветка fix/export-deploy-and-llm-retry.
+Подробности: docs/progress/P17-export-deploy-and-llm-retry.md.
 
 Последняя закрытая: PPTX-экспорт — SVG-иконки без растрового fallback
 («Не удалось отобразить рисунок» в PowerPoint-вьюверах). Диагноз по реальным

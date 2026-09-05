@@ -198,6 +198,140 @@ def test_generate_presentation_handler_full_flow_uses_mocked_dependencies():
     assert get_slide_content.call_args_list[1].kwargs["slide_number"] == 2
 
 
+def test_generate_presentation_respects_slide_llm_concurrency():
+    """Слайды идут параллельно, но не больше SLIDE_LLM_CONCURRENCY.
+
+    Регресс на последовательные батчи: 6 слайдов при лимите 2 — все вызовы
+    контента должны быть в полёте одновременно не более чем по 2, при этом
+    параллелизм реально достигается (максимум == 2, а не 1).
+    """
+    n_slides = 6
+    concurrency_limit = 2
+    request = GeneratePresentationRequest(
+        content="Create a six-slide deck about renewable energy.",
+        n_slides=n_slides,
+        language="English",
+        export_as="pptx",
+        template="general",
+    )
+    presentation_id = uuid.uuid4()
+    template_id = "general"
+    template = TemplateV2(
+        id=template_id,
+        name="General",
+        layouts=_template_layout_payload(),
+        is_default=True,
+    )
+    session = FakeAsyncSession(get_results={template_id: template})
+
+    outline_slides = ",".join(
+        f'{{"content":"## Slide {index}"}}' for index in range(1, n_slides + 1)
+    )
+
+    async def fake_outline_stream(*_args, **_kwargs):
+        yield '{"slides":[' + outline_slides + "]}"
+
+    in_flight = 0
+    max_in_flight = 0
+    slide_numbers: list[int] = []
+
+    async def fake_slide_content(*_args, **kwargs):
+        nonlocal in_flight, max_in_flight
+        in_flight += 1
+        max_in_flight = max(max_in_flight, in_flight)
+        try:
+            # имитация LLM-задержки: другие вызовы должны успеть стартовать
+            await asyncio.sleep(0.01)
+        finally:
+            in_flight -= 1
+        slide_numbers.append(kwargs["slide_number"])
+        return {"title": "ok"}
+
+    with (
+        patch.object(
+            presentation_endpoint.MEM0_PRESENTATION_MEMORY_SERVICE,
+            "store_generation_context",
+            new=AsyncMock(),
+        ),
+        patch.object(
+            presentation_endpoint.MEM0_PRESENTATION_MEMORY_SERVICE,
+            "store_generated_outlines",
+            new=AsyncMock(),
+        ),
+        patch.object(
+            presentation_endpoint,
+            "generate_ppt_outline",
+            side_effect=fake_outline_stream,
+        ),
+        patch.object(
+            presentation_endpoint,
+            "generate_presentation_structure",
+            new=AsyncMock(return_value=PresentationStructureModel(slides=[0, 1] * (n_slides // 2))),
+        ),
+        patch.object(
+            presentation_endpoint,
+            "get_slide_content_from_type_and_outline",
+            new=fake_slide_content,
+        ),
+        patch.object(
+            presentation_endpoint,
+            "get_slide_llm_concurrency",
+            new=Mock(return_value=concurrency_limit),
+        ),
+        patch.object(
+            presentation_endpoint,
+            "process_slide_and_fetch_assets",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch.object(
+            presentation_endpoint,
+            "get_images_directory",
+            return_value="/tmp",
+        ),
+        patch.object(
+            presentation_endpoint,
+            "ImageGenerationService",
+            return_value=Mock(),
+        ),
+        patch.object(
+            presentation_endpoint,
+            "export_presentation",
+            new=AsyncMock(
+                return_value=PresentationAndPath(
+                    presentation_id=presentation_id,
+                    path="/tmp/generated/deck.pptx",
+                )
+            ),
+        ),
+        patch.object(
+            presentation_endpoint.CONCURRENT_SERVICE,
+            "run_task",
+            new=Mock(),
+        ),
+        patch.object(
+            presentation_endpoint,
+            "random",
+            new=Mock(randint=Mock(return_value=0)),
+        ),
+    ):
+        response = _run(
+            presentation_endpoint.generate_presentation_handler(
+                request=request,
+                presentation_id=presentation_id,
+                async_status=None,
+                sql_session=session,
+            )
+        )
+
+    assert response.path.endswith(".pptx")
+    # все слайды сгенерированы, порядок сохранён
+    assert slide_numbers == list(range(1, n_slides + 1))
+    assert len(session.added_all) == n_slides
+    assert [slide.index for slide in session.added_all] == list(range(n_slides))
+    # параллелизм ограничен семафором и при этом реально достигается
+    assert max_in_flight == concurrency_limit
+
+
 def test_async_task_data_carries_presentation_ref_for_polling_callers():
     request = GeneratePresentationRequest(
         content="Create a two-slide deck about renewable energy.",

@@ -80,6 +80,7 @@ from templates.v2.theme import template_theme_for_presentation
 from utils.asset_directory_utils import get_images_directory
 from utils.dict_utils import deep_update
 from utils.export_utils import export_presentation
+from utils.get_env import get_slide_llm_concurrency
 from utils.icon_weights import DEFAULT_ICON_TYPE, extract_icon_type_from_settings
 from utils.llm_calls.generate_presentation_outlines import (
     generate_ppt_outline,
@@ -2624,24 +2625,29 @@ async def generate_presentation_handler(
         async_assets_generation_tasks = []
         image_warnings: list[dict] = []
 
-        # 7. Generate slide content concurrently (batched), then build slides and fetch assets
-        slides: list[SlideModel] = []
-
+        # 7. Generate slide content concurrently, then build slides and fetch assets
         slide_layout_indices = presentation_structure.slides
         slide_layouts = [layout_model.slides[idx] for idx in slide_layout_indices]
         total_slides_to_create = len(slide_layouts)
 
-        # Schedule slide content generation and asset fetching in batches of 10
-        batch_size = 10
-        for start in range(0, len(slide_layouts), batch_size):
-            await raise_if_client_disconnected()
-            end = min(start + batch_size, len(slide_layouts))
+        # Контент слайда — это LLM-вызов: вызовы идут параллельно, семафор
+        # ограничивает одновременные запросы к провайдеру
+        # (SLIDE_LLM_CONCURRENCY, default 10 — прежний размер батча). Раньше
+        # слайды генерировались последовательными батчами по 10, и деки
+        # больше батча сериализовались. Прогресс пишет отдельная
+        # reporter-задача: общая AsyncSession не используется из параллельных
+        # задач слайдов — конкурентные коммиты в неё небезопасны.
+        slide_concurrency = get_slide_llm_concurrency()
+        slide_llm_semaphore = asyncio.Semaphore(slide_concurrency)
+        completed_slides = 0
+        progress_wakeup = asyncio.Event()
+        stop_progress_reporter = asyncio.Event()
 
-            print(f"Generating slides from {start} to {end}")
-
-            # Generate contents for this batch concurrently
-            content_tasks = [
-                get_slide_content_from_type_and_outline(
+        async def generate_slide(i: int) -> SlideModel:
+            nonlocal completed_slides
+            async with slide_llm_semaphore:
+                await raise_if_client_disconnected()
+                slide_content: dict = await get_slide_content_from_type_and_outline(
                     slide_layouts[i],
                     presentation_outlines.slides[i],
                     language_to_use,
@@ -2651,59 +2657,96 @@ async def generate_presentation_handler(
                     slide_number=i + 1,
                     disconnect_checker=disconnect_checker,
                 )
-                for i in range(start, end)
-            ]
-            batch_contents: list[dict] = await asyncio.gather(*content_tasks)
 
-            # Build slides for this batch
-            batch_slides: list[SlideModel] = []
-            for offset, slide_content in enumerate(batch_contents):
-                i = start + offset
-                slide_layout = slide_layouts[i]
-                slide = SlideModel(
-                    presentation=presentation_id,
-                    layout_group=layout_model.name,
-                    layout=slide_layout.id,
-                    index=i,
-                    speaker_note=slide_content.get("__speaker_note__"),
-                    content=slide_content,
-                    ui=_template_slide_ui(layout_payload, slide_layout.id),
-                )
-                slides.append(slide)
-                batch_slides.append(slide)
-
-            if async_status:
-                async_status.data = _presentation_task_progress_data(
-                    created_slides=len(slides),
-                    remaining_slides=total_slides_to_create - len(slides),
-                    presentation_id=presentation_id,
-                )
-                async_status.updated_at = datetime.now()
-                sql_session.add(async_status)
-                await sql_session.commit()
+            slide_layout = slide_layouts[i]
+            slide = SlideModel(
+                presentation=presentation_id,
+                layout_group=layout_model.name,
+                layout=slide_layout.id,
+                index=i,
+                speaker_note=slide_content.get("__speaker_note__"),
+                content=slide_content,
+                ui=_template_slide_ui(layout_payload, slide_layout.id),
+            )
 
             if using_slides_markdown:
-                image_urls_for_batch = get_images_for_slides_from_outline(
-                    presentation_outlines.slides[start:end]
-                )
+                outline_image_urls = get_images_for_slides_from_outline(
+                    presentation_outlines.slides[i : i + 1]
+                )[0]
             else:
-                image_urls_for_batch = [[] for _ in batch_slides]
+                outline_image_urls = []
 
-            # Start asset fetch tasks immediately so they run in parallel with next batch's LLM calls
-            asset_tasks = [
+            # Задача ассетов стартует сразу и работает параллельно
+            # с оставшимися LLM-вызовами контента.
+            async_assets_generation_tasks.append(
                 asyncio.create_task(
                     process_slide_and_fetch_assets(
                         image_generation_service,
                         slide,
-                        outline_image_urls=image_urls_for_batch[offset],
+                        outline_image_urls=outline_image_urls,
                         icon_weight=layout_model.icon_weight,
                         allow_image_fallback=True,
                         image_warnings=image_warnings,
                     )
                 )
-                for offset, slide in enumerate(batch_slides)
-            ]
-            async_assets_generation_tasks.extend(asset_tasks)
+            )
+
+            completed_slides += 1
+            progress_wakeup.set()
+            return slide
+
+        async def report_slide_progress() -> None:
+            reported = 0
+            while True:
+                await progress_wakeup.wait()
+                progress_wakeup.clear()
+                if completed_slides > reported:
+                    reported = completed_slides
+                    if async_status:
+                        try:
+                            async_status.data = _presentation_task_progress_data(
+                                created_slides=completed_slides,
+                                remaining_slides=total_slides_to_create - completed_slides,
+                                presentation_id=presentation_id,
+                            )
+                            async_status.updated_at = datetime.now()
+                            sql_session.add(async_status)
+                            await sql_session.commit()
+                        except Exception as error:
+                            # прогресс best-effort: провал коммита не должен
+                            # останавливать генерацию или убивать reporter
+                            logger.warning(
+                                "[presentation.generate] progress commit failed: %s",
+                                error,
+                            )
+                if stop_progress_reporter.is_set():
+                    return
+
+        print(f"Generating {total_slides_to_create} slides (concurrency={slide_concurrency})")
+        slide_tasks = [
+            asyncio.create_task(generate_slide(i)) for i in range(total_slides_to_create)
+        ]
+        progress_reporter = asyncio.create_task(report_slide_progress())
+        try:
+            slides: list[SlideModel] = list(await asyncio.gather(*slide_tasks))
+        except BaseException:
+            # неудавшаяся генерация: гасим оставшиеся LLM-вызовы (жгут токены
+            # провайдера) и задачи ассетов; сессию задачи слайдов не трогают,
+            # так что отмена для неё безопасна
+            for task in slide_tasks:
+                task.cancel()
+            for asset_task in async_assets_generation_tasks:
+                asset_task.cancel()
+            raise
+        finally:
+            stop_progress_reporter.set()
+            progress_wakeup.set()
+            try:
+                await progress_reporter
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                logger.warning("[presentation.generate] progress reporter failed: %s", error)
 
         log_stage_done("slides")
         if async_status:
@@ -2717,7 +2760,8 @@ async def generate_presentation_handler(
             sql_session.add(async_status)
             await sql_session.commit()
 
-        # Run all asset tasks concurrently while batches may still be generating content
+        # Ассеты (иконки/картинки) уже гоняются параллельно с LLM-вызовами
+        # контента — здесь просто дожидаемся их всех.
         generated_assets_list = await asyncio.gather(*async_assets_generation_tasks)
         generated_assets = []
         for assets_list in generated_assets_list:

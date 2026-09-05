@@ -15,6 +15,7 @@ from fastapi import HTTPException
 
 from utils import llm_utils
 from utils.llm_utils import (
+    _is_upstream_rate_or_server_error,
     _is_upstream_schema_violation,
     generate_structured_with_schema_retries,
 )
@@ -29,6 +30,14 @@ SAIL_VIOLATION = (
 class FakeLLMError(Exception):
     def __init__(self, message: str) -> None:
         self.message = message
+        super().__init__(message)
+
+
+class FakeUpstreamStatusError(Exception):
+    """Ошибка провайдера с HTTP-статусом (как у openai/anthropic SDK)."""
+
+    def __init__(self, status_code: int, message: str = "upstream error") -> None:
+        self.status_code = status_code
         super().__init__(message)
 
 
@@ -154,3 +163,104 @@ async def test_empty_content_still_retries_three_times(
     assert exc_info.value.status_code == 400
     assert len(calls) == 3
     assert asyncio is not None  # sleep уже подменён фикстурой
+
+
+# ---------------------------------------------------------------------------
+# 429/5xx от провайдера: отдельный класс ретраев с экспоненциальными паузами
+# ---------------------------------------------------------------------------
+
+
+def test_classifies_upstream_rate_or_server_error() -> None:
+    assert _is_upstream_rate_or_server_error(FakeUpstreamStatusError(429))
+    assert _is_upstream_rate_or_server_error(FakeUpstreamStatusError(500))
+    assert _is_upstream_rate_or_server_error(FakeUpstreamStatusError(503))
+    assert _is_upstream_rate_or_server_error(FakeLLMError("Rate limit reached for requests"))
+    assert _is_upstream_rate_or_server_error(FakeLLMError("Too many requests, slow down"))
+    assert not _is_upstream_rate_or_server_error(FakeUpstreamStatusError(400))
+    assert not _is_upstream_rate_or_server_error(FakeUpstreamStatusError(401))
+    # локальные HTTP-ошибки движка апстримом не считаются
+    assert not _is_upstream_rate_or_server_error(
+        HTTPException(status_code=429, detail="quota exhausted")
+    )
+    assert not _is_upstream_rate_or_server_error(FakeLLMError("connection reset by peer"))
+
+
+@pytest.mark.anyio
+async def test_retries_rate_limit_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """429 → пауза → повторный вызов возвращает контент."""
+    calls: list[int] = []
+
+    async def fake_generate(_client=None, **_kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise FakeUpstreamStatusError(429, "rate limit exceeded")
+        return {"title": "ok"}
+
+    monkeypatch.setattr(llm_utils, "_generate_structured_content", fake_generate)
+
+    result = await generate_structured_with_schema_retries(
+        client=object(),
+        model="test-model",
+        messages=_messages(),
+        response_format={"type": "json_schema"},
+        json_schema={"type": "object"},
+    )
+    assert result == {"title": "ok"}
+    assert len(calls) == 2
+
+
+@pytest.mark.anyio
+async def test_rate_limit_retries_are_capped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Постоянный 429 — после лимита ретраев ошибка идёт наверх."""
+    calls: list[int] = []
+
+    async def fake_generate(_client=None, **_kwargs):
+        calls.append(1)
+        raise FakeUpstreamStatusError(500, "internal server error")
+
+    monkeypatch.setattr(llm_utils, "_generate_structured_content", fake_generate)
+
+    with pytest.raises(FakeUpstreamStatusError):
+        await generate_structured_with_schema_retries(
+            client=object(),
+            model="test-model",
+            messages=_messages(),
+            response_format={"type": "json_schema"},
+            json_schema={"type": "object"},
+        )
+    # 1 первая попытка + 3 ретрая
+    assert len(calls) == 4
+
+
+@pytest.mark.anyio
+async def test_schema_violation_and_rate_limit_retry_independently(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Счётчики ретраев независимы: 429 не съедает бюджет schema-ретраев."""
+    calls: list[str] = []
+
+    async def fake_generate(_client=None, **_kwargs):
+        if len(calls) == 0:
+            calls.append("rate")
+            raise FakeUpstreamStatusError(429, "rate limit exceeded")
+        if len(calls) == 1:
+            calls.append("schema")
+            raise FakeLLMError(SAIL_VIOLATION)
+        calls.append("ok")
+        return {"title": "ok"}
+
+    monkeypatch.setattr(llm_utils, "_generate_structured_content", fake_generate)
+
+    result = await generate_structured_with_schema_retries(
+        client=object(),
+        model="test-model",
+        messages=_messages(),
+        response_format={"type": "json_schema"},
+        json_schema={"type": "object"},
+    )
+    assert result == {"title": "ok"}
+    assert calls == ["rate", "schema", "ok"]

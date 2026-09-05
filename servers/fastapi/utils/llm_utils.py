@@ -20,6 +20,7 @@ from llmai.shared import (
     normalize_content_parts,
 )
 
+from utils.get_env import get_llm_slow_call_warn_seconds
 from utils.llm_config import get_extra_body, llm_structured_outputs_enabled
 from utils.schema_utils import get_schema_validation_errors
 
@@ -308,6 +309,13 @@ _UPSTREAM_SCHEMA_VIOLATION_MARKERS = (
 _MAX_UPSTREAM_SCHEMA_RETRIES = 2
 _UPSTREAM_RETRY_DELAYS_SEC = (1.0, 2.0)
 
+#: 429/5xx от провайдера — временный отказ: под нагрузкой аккаунта или самого
+#: апстрима повторная попытка через паузу обычно проходит. Ретраим отдельно
+#: от schema-нарушений, со своим счётчиком и экспоненциальными паузами.
+_MAX_UPSTREAM_RATE_RETRIES = 3
+_UPSTREAM_RATE_RETRY_DELAYS_SEC = (1.0, 4.0, 8.0)
+_UPSTREAM_RATE_LIMIT_MARKERS = ("rate limit", "rate_limit", "too many requests")
+
 
 def _is_upstream_schema_violation(error: BaseException) -> bool:
     """Upstream-отбой по response-схеме — единственный класс, который ретраим."""
@@ -319,6 +327,33 @@ def _is_upstream_schema_violation(error: BaseException) -> bool:
         if any(marker in lowered for marker in _UPSTREAM_SCHEMA_VIOLATION_MARKERS):
             return True
     return False
+
+
+def _is_upstream_rate_or_server_error(error: BaseException) -> bool:
+    """429/5xx от провайдера: по ``status_code``, фолбэк — по тексту ошибки.
+
+    Локальные HTTP-ошибки движка (fastapi ``HTTPException``) апстримом не
+    считаются и не ретраятся этим механизмом.
+    """
+    if isinstance(error, HTTPException):
+        return False
+    status_code = getattr(error, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code == 429 or status_code >= 500
+    text = str(error).lower()
+    return any(marker in text for marker in _UPSTREAM_RATE_LIMIT_MARKERS)
+
+
+def _warn_if_slow_llm_call(model: str, duration_seconds: float) -> None:
+    """Warning для одиночного медленного LLM-вызова (стенд-диагностика)."""
+    threshold = get_llm_slow_call_warn_seconds()
+    if threshold > 0 and duration_seconds >= threshold:
+        LOGGER.warning(
+            "[llm.slow_call] model=%s duration_s=%.1f threshold_s=%.0f",
+            model,
+            duration_seconds,
+            threshold,
+        )
 
 
 async def generate_structured_with_schema_retries(
@@ -340,7 +375,8 @@ async def generate_structured_with_schema_retries(
     """
     max_validation_loops = max(1, validate_schema_max_loop_count)
     working_messages: list[Message] = list(messages)
-    upstream_retries = 0
+    schema_retries = 0
+    rate_retries = 0
     first_call = True
 
     for validation_attempt in range(max_validation_loops):
@@ -349,6 +385,7 @@ async def generate_structured_with_schema_retries(
         while content is None:
             await _raise_if_client_disconnected(disconnect_checker)
             try:
+                call_started = time.monotonic()
                 content = await _generate_structured_content(
                     client,
                     disconnect_checker=disconnect_checker,
@@ -361,19 +398,36 @@ async def generate_structured_with_schema_retries(
                         response_format=response_format,
                     ),
                 )
+                _warn_if_slow_llm_call(model, time.monotonic() - call_started)
                 first_call = False
             except Exception as error:
-                if upstream_retries < _MAX_UPSTREAM_SCHEMA_RETRIES and (
+                if schema_retries < _MAX_UPSTREAM_SCHEMA_RETRIES and (
                     _is_upstream_schema_violation(error)
                 ):
-                    upstream_retries += 1
+                    schema_retries += 1
                     delay = _UPSTREAM_RETRY_DELAYS_SEC[
-                        min(upstream_retries, len(_UPSTREAM_RETRY_DELAYS_SEC)) - 1
+                        min(schema_retries, len(_UPSTREAM_RETRY_DELAYS_SEC)) - 1
                     ]
                     LOGGER.warning(
                         "Upstream schema violation, retry %d/%d in %.0fs: %s",
-                        upstream_retries,
+                        schema_retries,
                         _MAX_UPSTREAM_SCHEMA_RETRIES,
+                        delay,
+                        error,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                if rate_retries < _MAX_UPSTREAM_RATE_RETRIES and (
+                    _is_upstream_rate_or_server_error(error)
+                ):
+                    rate_retries += 1
+                    delay = _UPSTREAM_RATE_RETRY_DELAYS_SEC[
+                        min(rate_retries, len(_UPSTREAM_RATE_RETRY_DELAYS_SEC)) - 1
+                    ]
+                    LOGGER.warning(
+                        "Upstream rate limit / server error, retry %d/%d in %.0fs: %s",
+                        rate_retries,
+                        _MAX_UPSTREAM_RATE_RETRIES,
                         delay,
                         error,
                     )
