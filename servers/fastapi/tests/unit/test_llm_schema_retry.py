@@ -9,12 +9,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 from fastapi import HTTPException
 
 from utils import llm_utils
 from utils.llm_utils import (
+    _is_transient_parse_error,
     _is_upstream_rate_or_server_error,
     _is_upstream_schema_violation,
     generate_structured_with_schema_retries,
@@ -264,3 +266,72 @@ async def test_schema_violation_and_rate_limit_retry_independently(
     )
     assert result == {"title": "ok"}
     assert calls == ["rate", "schema", "ok"]
+
+
+# ---------------------------------------------------------------------------
+# Пустой/битый JSON от модели: transient parse-ошибки ретраятся отдельно
+# (прод-кейс 2026-09-05: «Expecting value: line 1 column 1 (char 0)»)
+# ---------------------------------------------------------------------------
+
+
+def test_classifies_transient_parse_error() -> None:
+    assert _is_transient_parse_error(json.JSONDecodeError("Expecting value", "", 0))
+    # обёрнутые варианты с тем же текстом (в т.ч. прод-кейс HTTPException)
+    assert _is_transient_parse_error(FakeLLMError("Expecting value: line 1 column 1 (char 0)"))
+    assert _is_transient_parse_error(
+        HTTPException(status_code=500, detail="Expecting value: line 1 column 1 (char 0)")
+    )
+    assert _is_transient_parse_error(FakeLLMError("Invalid JSON in model response"))
+    assert not _is_transient_parse_error(FakeLLMError("connection reset by peer"))
+    assert not _is_transient_parse_error(HTTPException(status_code=400, detail="bad input"))
+
+
+@pytest.mark.anyio
+async def test_retries_transient_parse_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Пустой JSON → пауза → повторный вызов возвращает контент."""
+    calls: list[int] = []
+
+    async def fake_generate(_client=None, **_kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise json.JSONDecodeError("Expecting value", "", 0)
+        return {"title": "ok"}
+
+    monkeypatch.setattr(llm_utils, "_generate_structured_content", fake_generate)
+
+    result = await generate_structured_with_schema_retries(
+        client=object(),
+        model="test-model",
+        messages=_messages(),
+        response_format={"type": "json_schema"},
+        json_schema={"type": "object"},
+    )
+    assert result == {"title": "ok"}
+    assert len(calls) == 2
+
+
+@pytest.mark.anyio
+async def test_transient_parse_retries_are_capped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Постоянно пустой JSON — после лимита ретраев ошибка идёт наверх."""
+    calls: list[int] = []
+
+    async def fake_generate(_client=None, **_kwargs):
+        calls.append(1)
+        raise json.JSONDecodeError("Expecting value", "", 0)
+
+    monkeypatch.setattr(llm_utils, "_generate_structured_content", fake_generate)
+
+    with pytest.raises(json.JSONDecodeError):
+        await generate_structured_with_schema_retries(
+            client=object(),
+            model="test-model",
+            messages=_messages(),
+            response_format={"type": "json_schema"},
+            json_schema={"type": "object"},
+        )
+    # 1 первая попытка + 2 ретрая
+    assert len(calls) == 3

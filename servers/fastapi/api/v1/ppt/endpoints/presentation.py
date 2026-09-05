@@ -2420,9 +2420,10 @@ async def generate_presentation_handler(
                 instructions=request.instructions,
             )
 
-            presentation_outlines_text = ""
+            class _OutlineTransientError(Exception):
+                """Апстрим-флейм outline: пустой JSON / недобор слайдов."""
 
-            async def collect_outline() -> str:
+            async def collect_presentation_outlines() -> PresentationOutlineModel:
                 text = ""
                 async for chunk in generate_ppt_outline(
                     request.content,
@@ -2440,50 +2441,71 @@ async def generate_presentation_handler(
                     if isinstance(chunk, HTTPException):
                         raise chunk
                     text += chunk
-                return text
 
-            try:
-                presentation_outlines_text = await collect_outline()
-            except HTTPException as error:
-                # апстрим-провайдер flaky: один ретрай на 429/5xx, прочие
-                # ошибки (в т.ч. disconnect) идут наверх без повторов
-                if error.status_code == 429 or error.status_code >= 500:
-                    logger.warning(
-                        "[presentation.generate] outline upstream error (%s), retrying once",
-                        error.detail,
+                # Tolerant parse: models without structured outputs may wrap
+                # the JSON in markdown fences or add prose around it.
+                presentation_outlines_json = extract_structured_content(text)
+                if presentation_outlines_json is None:
+                    raise _OutlineTransientError("outline returned no JSON content")
+
+                outlines = PresentationOutlineModel(
+                    **normalize_outline_payload(
+                        presentation_outlines_json,
+                        MAX_NUMBER_OF_SLIDES,
                     )
-                    await asyncio.sleep(2)
-                    presentation_outlines_text = await collect_outline()
-                else:
-                    raise
+                )
 
-            # Tolerant parse: models without structured outputs may wrap the
-            # JSON in markdown fences or add prose around it.
-            presentation_outlines_json = extract_structured_content(presentation_outlines_text)
-            if presentation_outlines_json is None:
+                # Undershooting is a real failure (nothing to pad the deck
+                # with), but it is a model flake: a repeat usually delivers.
+                if n_slides_to_generate is not None and len(outlines.slides) < n_slides_to_generate:
+                    raise _OutlineTransientError(
+                        f"outline returned {len(outlines.slides)} of "
+                        f"{n_slides_to_generate} requested slides"
+                    )
+                return outlines
+
+            presentation_outlines: PresentationOutlineModel | None = None
+            last_transient_error: _OutlineTransientError | None = None
+            for outline_attempt in range(2):
+                try:
+                    presentation_outlines = await collect_presentation_outlines()
+                    last_transient_error = None
+                    break
+                except _OutlineTransientError as error:
+                    last_transient_error = error
+                    if outline_attempt == 0:
+                        logger.warning(
+                            "[presentation.generate] outline transient failure (%s), retrying once",
+                            error,
+                        )
+                        await asyncio.sleep(2)
+                except HTTPException as error:
+                    # апстрим-провайдер flaky: один ретрай на 429/5xx, прочие
+                    # ошибки (в т.ч. disconnect) идут наверх без повторов
+                    if outline_attempt == 0 and (
+                        error.status_code == 429 or error.status_code >= 500
+                    ):
+                        logger.warning(
+                            "[presentation.generate] outline upstream error (%s), retrying once",
+                            error.detail,
+                        )
+                        await asyncio.sleep(2)
+                    else:
+                        raise
+
+            if presentation_outlines is None:
+                transient_detail = f" ({last_transient_error})" if last_transient_error else ""
                 raise HTTPException(
                     status_code=400,
-                    detail="Failed to generate presentation outlines. Please try again.",
+                    detail=(
+                        "Failed to generate presentation outlines"
+                        f"{transient_detail}. Please try again."
+                    ),
                 )
-            presentation_outlines = PresentationOutlineModel(
-                **normalize_outline_payload(
-                    presentation_outlines_json,
-                    MAX_NUMBER_OF_SLIDES,
-                )
-            )
 
+            # Overshooting by a slide or two is common and recoverable:
+            # keep the first n and drop the rest.
             if n_slides_to_generate is not None:
-                if len(presentation_outlines.slides) < n_slides_to_generate:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            "Failed to generate presentation outlines with requested "
-                            "number of slides. Please try again."
-                        ),
-                    )
-                # Overshooting by a slide or two is common and recoverable:
-                # keep the first n and drop the rest. Only undershooting is a
-                # real failure, since there is nothing to pad the deck with.
                 presentation_outlines.slides = presentation_outlines.slides[:n_slides_to_generate]
 
             total_outlines = len(presentation_outlines.slides)

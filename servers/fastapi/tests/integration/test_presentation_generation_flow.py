@@ -332,6 +332,121 @@ def test_generate_presentation_respects_slide_llm_concurrency():
     assert max_in_flight == concurrency_limit
 
 
+def test_generate_presentation_retries_undershooting_outline():
+    """Недобор аутлайнов — transient-флейм модели: один ретрай спасает генерацию.
+
+    Регресс на прод-флейк (P19): модель вернула меньше слайдов, чем просили,
+    генерация падала с 400 «...with requested number of slides» без повтора.
+    """
+    n_slides = 6
+    request = GeneratePresentationRequest(
+        content="Create a six-slide deck about renewable energy.",
+        n_slides=n_slides,
+        language="English",
+        export_as="pptx",
+        template="general",
+    )
+    presentation_id = uuid.uuid4()
+    template_id = "general"
+    template = TemplateV2(
+        id=template_id,
+        name="General",
+        layouts=_template_layout_payload(),
+        is_default=True,
+    )
+    session = FakeAsyncSession(get_results={template_id: template})
+
+    def _outline_text(count: int) -> str:
+        slides = ",".join(f'{{"content":"## Slide {index}"}}' for index in range(1, count + 1))
+        return '{"slides":[' + slides + "]}"
+
+    async def undershooting_stream(*_args, **_kwargs):
+        yield _outline_text(2)
+
+    async def full_stream(*_args, **_kwargs):
+        yield _outline_text(n_slides)
+
+    with (
+        patch.object(
+            presentation_endpoint.MEM0_PRESENTATION_MEMORY_SERVICE,
+            "store_generation_context",
+            new=AsyncMock(),
+        ),
+        patch.object(
+            presentation_endpoint.MEM0_PRESENTATION_MEMORY_SERVICE,
+            "store_generated_outlines",
+            new=AsyncMock(),
+        ),
+        patch.object(
+            presentation_endpoint,
+            "generate_ppt_outline",
+            side_effect=[undershooting_stream(), full_stream()],
+        ),
+        patch.object(
+            presentation_endpoint.asyncio,
+            "sleep",
+            new=AsyncMock(),
+        ),
+        patch.object(
+            presentation_endpoint,
+            "generate_presentation_structure",
+            new=AsyncMock(return_value=PresentationStructureModel(slides=[0, 1] * (n_slides // 2))),
+        ),
+        patch.object(
+            presentation_endpoint,
+            "get_slide_content_from_type_and_outline",
+            new=AsyncMock(return_value={"title": "ok"}),
+        ),
+        patch.object(
+            presentation_endpoint,
+            "process_slide_and_fetch_assets",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch.object(
+            presentation_endpoint,
+            "get_images_directory",
+            return_value="/tmp",
+        ),
+        patch.object(
+            presentation_endpoint,
+            "ImageGenerationService",
+            return_value=Mock(),
+        ),
+        patch.object(
+            presentation_endpoint,
+            "export_presentation",
+            new=AsyncMock(
+                return_value=PresentationAndPath(
+                    presentation_id=presentation_id,
+                    path="/tmp/generated/deck.pptx",
+                )
+            ),
+        ),
+        patch.object(
+            presentation_endpoint.CONCURRENT_SERVICE,
+            "run_task",
+            new=Mock(),
+        ),
+        patch.object(
+            presentation_endpoint,
+            "random",
+            new=Mock(randint=Mock(return_value=0)),
+        ),
+    ):
+        response = _run(
+            presentation_endpoint.generate_presentation_handler(
+                request=request,
+                presentation_id=presentation_id,
+                async_status=None,
+                sql_session=session,
+            )
+        )
+
+    assert response.path.endswith(".pptx")
+    # ретрай состоялся: второй стрим выдал полный набор слайдов
+    assert len(session.added_all) == n_slides
+
+
 def test_async_task_data_carries_presentation_ref_for_polling_callers():
     request = GeneratePresentationRequest(
         content="Create a two-slide deck about renewable energy.",

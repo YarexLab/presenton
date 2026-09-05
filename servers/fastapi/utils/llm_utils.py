@@ -316,6 +316,13 @@ _MAX_UPSTREAM_RATE_RETRIES = 3
 _UPSTREAM_RATE_RETRY_DELAYS_SEC = (1.0, 4.0, 8.0)
 _UPSTREAM_RATE_LIMIT_MARKERS = ("rate limit", "rate_limit", "too many requests")
 
+#: Пустой/битый JSON в structured-вызове — transient-флейм модели. Прод-кейс
+#: (2026-09-05): «Expecting value: line 1 column 1 (char 0)» — модель отдала
+#: пустой контент; одиночный повтор того же запроса обычно проходит.
+_MAX_TRANSIENT_PARSE_RETRIES = 2
+_TRANSIENT_PARSE_RETRY_DELAYS_SEC = (1.0, 2.0)
+_TRANSIENT_PARSE_ERROR_MARKERS = ("expecting value", "invalid json", "json decode error")
+
 
 def _is_upstream_schema_violation(error: BaseException) -> bool:
     """Upstream-отбой по response-схеме — единственный класс, который ретраим."""
@@ -342,6 +349,19 @@ def _is_upstream_rate_or_server_error(error: BaseException) -> bool:
         return status_code == 429 or status_code >= 500
     text = str(error).lower()
     return any(marker in text for marker in _UPSTREAM_RATE_LIMIT_MARKERS)
+
+
+def _is_transient_parse_error(error: BaseException) -> bool:
+    """Пустой/битый JSON от модели в structured-вызове — transient-флейм.
+
+    Ловим и сырой ``JSONDecodeError`` (например, незащищённый
+    ``json.loads`` в llmai для openai-совместимых провайдеров), и
+    обёрнутые варианты с тем же текстом ошибки.
+    """
+    if isinstance(error, json.JSONDecodeError):
+        return True
+    lowered = str(error).lower()
+    return any(marker in lowered for marker in _TRANSIENT_PARSE_ERROR_MARKERS)
 
 
 def _warn_if_slow_llm_call(model: str, duration_seconds: float) -> None:
@@ -377,6 +397,7 @@ async def generate_structured_with_schema_retries(
     working_messages: list[Message] = list(messages)
     schema_retries = 0
     rate_retries = 0
+    parse_retries = 0
     first_call = True
 
     for validation_attempt in range(max_validation_loops):
@@ -428,6 +449,22 @@ async def generate_structured_with_schema_retries(
                         "Upstream rate limit / server error, retry %d/%d in %.0fs: %s",
                         rate_retries,
                         _MAX_UPSTREAM_RATE_RETRIES,
+                        delay,
+                        error,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                if parse_retries < _MAX_TRANSIENT_PARSE_RETRIES and (
+                    _is_transient_parse_error(error)
+                ):
+                    parse_retries += 1
+                    delay = _TRANSIENT_PARSE_RETRY_DELAYS_SEC[
+                        min(parse_retries, len(_TRANSIENT_PARSE_RETRY_DELAYS_SEC)) - 1
+                    ]
+                    LOGGER.warning(
+                        "Transient parse failure, retry %d/%d in %.0fs: %s",
+                        parse_retries,
+                        _MAX_TRANSIENT_PARSE_RETRIES,
                         delay,
                         error,
                     )
