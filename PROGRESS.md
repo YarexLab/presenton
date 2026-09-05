@@ -2,16 +2,18 @@
 
 ## Активная задача
 
-P19: ретраи transient-флеймов провайдера. Прод (после отключения reasoning
-в /settings): 1-я генерация прошла за 2 мин, 2-я упала с
-`HTTPException 500 «Expecting value: line 1 column 1 (char 0)»` — модель
-вернула пустой JSON в structured-вызове (llmai/openai/client.py парсит
-незащищённо), ретраев на этот класс нет. Второй флейк того же класса —
-недобор аутлайнов (дважды воспроизведён локально). Фиксы: (1)
-`generate_structured_with_schema_retries` — ретрай transient parse-ошибок
-(JSONDecodeError / «expecting value», 2 попытки, паузы 1/2 c); (2) outline —
-один ретрай на недобор слайдов и пустой JSON (сейчас ретраится только
-429/5xx). Ветка perf/parallel-slide-llm.
+No active task.
+
+Последняя закрытая: P19 — ретраи transient-флеймов провайдера. Прод-кейс
+после отключения reasoning: «Expecting value: line 1 column 1 (char 0)»
+(пустой JSON модели в structured-вызове, не ретраился) + недобор аутлайнов
+(дважды на локальном стенде). Фиксы: ретрай transient parse-ошибок в
+`generate_structured_with_schema_retries` (2 попытки, 1/2 c, ловит и
+JSONDecodeError, и обёрнутые маркеры) и один ретрай аутлайна на пустой
+JSON / недобор слайдов / 429-5xx с warning-логом. Ветка
+perf/parallel-slide-llm, коммит 0db9c856, `make check` exit 0. Ожидает
+merge в main и деплоя вместе с P18. Подробности:
+docs/progress/P19-provider-transient-retries.md.
 
 Последняя закрытая: P18 — параллельная генерация слайдов без барьера батчей
 + ретрай 429/5xx. Симптом «генерация >10 минут при CPU 20–30%»: конвейер
