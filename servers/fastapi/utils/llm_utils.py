@@ -84,19 +84,35 @@ async def _generate_structured_content(
     # the other providers, so it is the single path.
     completion_content: Any = None
     streamed_text: list[str] = []
-    async for event in stream_generate_events(
-        client,
-        disconnect_checker=disconnect_checker,
-        **{**kwargs, "stream": True},
-    ):
-        if isinstance(event, ResponseStreamCompletionChunk):
-            completion_content = event.content
-        elif getattr(event, "type", None) == "content":
-            chunk = getattr(event, "chunk", None)
-            if isinstance(chunk, str):
-                streamed_text.append(chunk)
-                if text_chunk_callback is not None:
-                    await text_chunk_callback(chunk)
+    try:
+        async for event in stream_generate_events(
+            client,
+            disconnect_checker=disconnect_checker,
+            **{**kwargs, "stream": True},
+        ):
+            if isinstance(event, ResponseStreamCompletionChunk):
+                completion_content = event.content
+            elif getattr(event, "type", None) == "content":
+                chunk = getattr(event, "chunk", None)
+                if isinstance(chunk, str):
+                    streamed_text.append(chunk)
+                    if text_chunk_callback is not None:
+                        await text_chunk_callback(chunk)
+    except Exception as error:
+        if not _is_json_parse_failure(error):
+            raise
+        # llmai жёстко парсит финальный контент при JSONSchemaResponse и
+        # роняет JSONDecodeError (обёрнутый в LLMError), хотя дельты контента
+        # уже прилетели: streamed_text содержит полный ответ. Гасим ошибку и
+        # отдадим текст tolerant-парсеру ниже — это спасает ответы с prose
+        # вокруг JSON и markdown-ограждениями; прочие классы (disconnect,
+        # 429/5xx) пробрасываются штатно.
+        LOGGER.warning(
+            "[llm.parse] provider returned non-JSON final content (%s); "
+            "falling back to tolerant parse of %d streamed chars",
+            error,
+            sum(len(chunk) for chunk in streamed_text),
+        )
 
     content = extract_structured_content(completion_content)
     if content is not None:
@@ -342,7 +358,21 @@ _UPSTREAM_RATE_LIMIT_MARKERS = ("rate limit", "rate_limit", "too many requests")
 #: пустой контент; одиночный повтор того же запроса обычно проходит.
 _MAX_TRANSIENT_PARSE_RETRIES = 2
 _TRANSIENT_PARSE_RETRY_DELAYS_SEC = (1.0, 2.0)
-_TRANSIENT_PARSE_ERROR_MARKERS = ("expecting value", "invalid json", "json decode error")
+#: Фразы сообщений json.JSONDecodeError. llmai заворачивает исключения стрима
+#: в LLMError(500, "500: <message>", cause=original) — bare-проверка
+#: isinstance(error, JSONDecodeError) на обёртке не работает, матчить нужно
+#: cause-цепочку или текст (_is_json_parse_failure).
+_JSON_PARSE_ERROR_MARKERS = (
+    "expecting value",
+    "expecting ',' delimiter",
+    "expecting property name",
+    "unterminated string",
+    "extra data",
+    "invalid control character",
+    "invalid \\escape",
+    "invalid json",
+    "json decode error",
+)
 
 
 def _is_upstream_schema_violation(error: BaseException) -> bool:
@@ -372,6 +402,26 @@ def _is_upstream_rate_or_server_error(error: BaseException) -> bool:
     return any(marker in text for marker in _UPSTREAM_RATE_LIMIT_MARKERS)
 
 
+def _is_json_parse_failure(error: BaseException) -> bool:
+    """Битый/непарсящийся JSON от провайдера, в т.ч. завёрнутый llmai.
+
+    llmai при structured-вызове жёстко парсит финальный контент
+    (``json.loads``) и роняет JSONDecodeError; до нас исключение доходит
+    как LLMError с оригиналом в ``cause``/``__cause__``, поэтому проверяем
+    цепочку, а не только сам error.
+    """
+    candidates = (
+        error,
+        getattr(error, "cause", None),
+        error.__cause__,
+    )
+    for candidate in candidates:
+        if isinstance(candidate, json.JSONDecodeError):
+            return True
+    text = str(error).lower()
+    return any(marker in text for marker in _JSON_PARSE_ERROR_MARKERS)
+
+
 def _is_transient_parse_error(error: BaseException) -> bool:
     """Пустой/битый JSON от модели в structured-вызове — transient-флейм.
 
@@ -379,10 +429,7 @@ def _is_transient_parse_error(error: BaseException) -> bool:
     ``json.loads`` в llmai для openai-совместимых провайдеров), и
     обёрнутые варианты с тем же текстом ошибки.
     """
-    if isinstance(error, json.JSONDecodeError):
-        return True
-    lowered = str(error).lower()
-    return any(marker in lowered for marker in _TRANSIENT_PARSE_ERROR_MARKERS)
+    return _is_json_parse_failure(error)
 
 
 def _warn_if_slow_llm_call(model: str, duration_seconds: float) -> None:
