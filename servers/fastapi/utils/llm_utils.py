@@ -266,14 +266,37 @@ def build_text_generation_metrics(
 def structured_validation_feedback_user_message(
     content: dict,
     validation_errors: list[str],
+    *,
+    content_errors: list[str] | None = None,
 ) -> UserMessage:
     max_error_count = 10
     max_json_chars = 6000
 
-    formatted_errors = validation_errors[:max_error_count]
-    if len(validation_errors) > max_error_count:
-        formatted_errors.append(
-            f"...and {len(validation_errors) - max_error_count} more validation errors."
+    def _format_errors(errors: list[str]) -> list[str]:
+        formatted = errors[:max_error_count]
+        if len(errors) > max_error_count:
+            formatted.append(
+                f"...and {len(errors) - max_error_count} more validation errors."
+            )
+        return formatted
+
+    sections: list[str] = []
+    if content_errors:
+        sections.append(
+            "Content quality issues (the JSON structure is valid, but these values "
+            "are not real audience-facing content):\n"
+            + "\n".join(f"- {error}" for error in _format_errors(content_errors))
+            + "\n\nReplace every flagged value with meaningful content about the "
+            "slide topic in the slide language. Never use response-schema field "
+            "names or keywords (e.g. \"minLength\", \"type object\"), internal "
+            "identifiers (e.g. \"__tablecard\"), generation meta-commentary, "
+            "placeholder punctuation (e.g. \"...\"), or glued/truncated words."
+        )
+    if validation_errors:
+        sections.append(
+            "The previous JSON response did not match the required response schema.\n\n"
+            "Validation errors:\n"
+            + "\n".join(f"- {error}" for error in _format_errors(validation_errors))
         )
 
     previous_response = json.dumps(
@@ -287,9 +310,7 @@ def structured_validation_feedback_user_message(
 
     return UserMessage(
         content=(
-            "The previous JSON response did not match the required response schema.\n\n"
-            "Validation errors:\n"
-            + "\n".join(f"- {error}" for error in formatted_errors)
+            "\n\n".join(sections)
             + "\n\nPrevious invalid JSON:\n"
             + f"```json\n{previous_response}\n```\n\n"
             + "Return corrected JSON only. Make sure it fully matches the required schema."
@@ -376,6 +397,25 @@ def _warn_if_slow_llm_call(model: str, duration_seconds: float) -> None:
         )
 
 
+class SlideContentQualityError(HTTPException):
+    """LLM-контент не прошёл контент-QC после всех попыток починки.
+
+    Возвращать заведомо мусорный ответ (schema-эхо, мета-болтовня, обрывы)
+    в деку хуже, чем уронить генерацию слайда: вызывающий код решает —
+    перегенерировать слайд или упасть с внятной ошибкой.
+    """
+
+    def __init__(self, validation_errors: list[str]) -> None:
+        self.validation_errors = list(validation_errors)
+        super().__init__(
+            status_code=502,
+            detail=(
+                "LLM returned invalid content after all validation attempts: "
+                + " | ".join(self.validation_errors[:8])
+            ),
+        )
+
+
 async def generate_structured_with_schema_retries(
     client: Any,
     model: str,
@@ -386,6 +426,7 @@ async def generate_structured_with_schema_retries(
     strict: bool = False,
     validate_schema: bool = False,
     validate_schema_max_loop_count: int = 4,
+    content_validator: Callable[[dict], list[str]] | None = None,
     disconnect_checker: DisconnectChecker | None = None,
     text_chunk_callback: TextChunkCallback | None = None,
 ) -> dict:
@@ -493,11 +534,28 @@ async def generate_structured_with_schema_retries(
             strict=strict,
         )
 
-        if not validation_errors:
+        # Контент-QC запускаем и при schema-ошибках: содержательный фидбек
+        # («ячейки повторяют имена полей схемы») полезнее голого списка
+        # нарушений и не должен срезаться лимитом ошибок в фидбеке.
+        content_errors = list(content_validator(content)) if content_validator else []
+        # Контентные ошибки вперёд: фидбек обрезается до 10 строк.
+        all_validation_errors = content_errors + validation_errors
+
+        if not all_validation_errors:
             return content
 
-        formatted_validation_errors = " | ".join(validation_errors)
+        formatted_validation_errors = " | ".join(all_validation_errors)
         if validation_attempt == max_validation_loops - 1:
+            if content_validator is not None:
+                # С вызовом, которому важен контент, возвращать последний
+                # невалидный ответ нельзя — это и есть источник мусорных
+                # слайдов (прод-кейс 2026-09-05). Роняем слайд: вызывающий
+                # код перегенерит его или отдаст ошибку пользователю.
+                LOGGER.error(
+                    "Content validation failed after max fixes, raising: %s",
+                    formatted_validation_errors,
+                )
+                raise SlideContentQualityError(all_validation_errors)
             LOGGER.warning(
                 "Validation error after max fixes, returning last response: %s",
                 formatted_validation_errors,
@@ -511,7 +569,11 @@ async def generate_structured_with_schema_retries(
             formatted_validation_errors,
         )
         working_messages.append(
-            structured_validation_feedback_user_message(content, validation_errors)
+            structured_validation_feedback_user_message(
+                content,
+                validation_errors,
+                content_errors=content_errors or None,
+            )
         )
 
     raise HTTPException(status_code=400, detail="LLM did not return any content")

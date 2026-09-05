@@ -7,6 +7,7 @@ import re
 import time
 import traceback
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
@@ -99,6 +100,7 @@ from utils.llm_calls.generate_smart_presentation import (
     resolve_smart_slide_count,
 )
 from utils.llm_utils import (
+    SlideContentQualityError,
     TextGenerationMetrics,
     extract_structured_content,
     message_content_to_text,
@@ -128,6 +130,53 @@ from utils.web_search import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+#: Попытки генерации контента одного слайда при провале контент-QC
+#: (SlideContentQualityError): schema-починка внутри вызова уже исчерпана,
+#: поэтому вторая попытка идёт с чистыми сообщениями — накопленный фидбек
+#: иногда уводит модель глубже в мусор. После последней попытки генерация
+#: падает: сохранить мусорный слайд (прод-кейс 2026-09-05) хуже, чем
+#: показать пользователю провал с номером слайда.
+SLIDE_CONTENT_QUALITY_ATTEMPTS = 2
+
+
+async def generate_slide_content_with_quality_retry(
+    generate: Callable[[], Awaitable[dict]],
+    *,
+    slide_number: int,
+    attempts: int = SLIDE_CONTENT_QUALITY_ATTEMPTS,
+) -> dict:
+    for attempt in range(1, attempts + 1):
+        try:
+            return await generate()
+        except SlideContentQualityError as error:
+            if attempt == attempts:
+                logger.error(
+                    "[presentation.generate] slide %d failed content quality "
+                    "validation after %d attempts",
+                    slide_number,
+                    attempt,
+                )
+                raise HTTPException(
+                    status_code=error.status_code,
+                    detail=(
+                        f"Slide {slide_number} content failed quality "
+                        f"validation: {error.detail}"
+                    ),
+                ) from error
+            logger.warning(
+                "[presentation.generate] slide %d content failed quality "
+                "validation, retrying (%d/%d): %s",
+                slide_number,
+                attempt,
+                attempts - 1,
+                error.detail,
+            )
+    raise HTTPException(
+        status_code=502,
+        detail=f"Slide {slide_number} content generation failed",
+    )
 
 
 PRESENTATION_ROUTER = APIRouter(prefix="/presentation", tags=["Presentation"])
@@ -2669,15 +2718,18 @@ async def generate_presentation_handler(
             nonlocal completed_slides
             async with slide_llm_semaphore:
                 await raise_if_client_disconnected()
-                slide_content: dict = await get_slide_content_from_type_and_outline(
-                    slide_layouts[i],
-                    presentation_outlines.slides[i],
-                    language_to_use,
-                    request.tone.value,
-                    request.verbosity.value,
-                    request.instructions,
+                slide_content: dict = await generate_slide_content_with_quality_retry(
+                    lambda: get_slide_content_from_type_and_outline(
+                        slide_layouts[i],
+                        presentation_outlines.slides[i],
+                        language_to_use,
+                        request.tone.value,
+                        request.verbosity.value,
+                        request.instructions,
+                        slide_number=i + 1,
+                        disconnect_checker=disconnect_checker,
+                    ),
                     slide_number=i + 1,
-                    disconnect_checker=disconnect_checker,
                 )
 
             slide_layout = slide_layouts[i]

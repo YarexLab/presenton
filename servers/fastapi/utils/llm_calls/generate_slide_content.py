@@ -6,6 +6,7 @@ from llmai.shared import JSONSchemaResponse, Message, SystemMessage, UserMessage
 
 from models.presentation_layout import SlideLayoutModel
 from models.presentation_outline_model import SlideOutlineModel
+from utils.content_quality import get_content_quality_errors
 from utils.llm_client_error_handler import handle_llm_client_exceptions
 from utils.llm_config import get_llm_config
 from utils.llm_provider import get_model
@@ -46,6 +47,13 @@ You need to generate structured content json based on the schema.
 - Output fields must contain only audience-facing content and data. For chart fields,
   populate the requested labels, series, and values rather than text such as "create a
   bar chart" or "show this data as a graph".
+- Every string value is content the audience will read: real facts, names, numbers and
+  phrasing in the slide language. Never fill values with response-schema field names or
+  JSON-Schema keywords ("minLength", "type object", "additional_properties"), internal
+  identifiers ("__tablecard", "__speaker_note__"), generation chatter ("please wait
+  while I import...", "some text ..."), placeholder junk ("...", "TBD"), or glued or
+  truncated words ("поставщиNo hardware"). If you cannot produce a value, write the
+  shortest meaningful content for that field instead.
 
 # Math Expression Rules
 - Wrap every LaTeX expression in `<latex>` and `</latex>` inside the generated string.
@@ -99,9 +107,112 @@ def _resolve_prompt_language(language: str | None) -> str:
     return s
 
 
+_MAX_SCHEMA_DESCRIPTION_LINES = 60
+
+
+def _schema_length_bounds(node: dict) -> str:
+    """«, 2..6 items» / «, up to 120 chars» / «» — по ограничениям схемы."""
+    bounds: list[str] = []
+    minimum = node.get("minLength")
+    maximum = node.get("maxLength")
+    if isinstance(minimum, int) and isinstance(maximum, int):
+        bounds.append(f"{minimum}..{maximum} chars")
+    elif isinstance(maximum, int):
+        bounds.append(f"up to {maximum} chars")
+    elif isinstance(minimum, int):
+        bounds.append(f"at least {minimum} chars")
+    min_items = node.get("minItems")
+    max_items = node.get("maxItems")
+    if isinstance(min_items, int) and isinstance(max_items, int):
+        bounds.append(f"{min_items}..{max_items} items")
+    elif isinstance(max_items, int):
+        bounds.append(f"up to {max_items} items")
+    if not bounds:
+        return ""
+    return ", " + " and ".join(bounds)
+
+
+def _schema_enum_options(node: dict) -> str:
+    options = node.get("enum")
+    if not isinstance(options, list) or not options:
+        return ""
+    rendered = ", ".join(str(option) for option in options[:8])
+    return f" (one of: {rendered})"
+
+
+def _describe_schema_properties(
+    properties: dict,
+    lines: list[str],
+    depth: int,
+) -> None:
+    indent = "  " * depth
+    for name, node in properties.items():
+        if len(lines) >= _MAX_SCHEMA_DESCRIPTION_LINES:
+            return
+        if not isinstance(node, dict):
+            lines.append(f"{indent}- {name}")
+            continue
+        node_type = node.get("type") or "any"
+        description = str(node.get("description") or "").strip()
+        suffix = f": {description}" if description else ""
+        if node_type == "object":
+            child_properties = node.get("properties")
+            lines.append(f"{indent}- {name} (object){suffix}")
+            if isinstance(child_properties, dict) and child_properties:
+                _describe_schema_properties(child_properties, lines, depth + 1)
+        elif node_type == "array":
+            items = node.get("items")
+            if (
+                isinstance(items, dict)
+                and items.get("type") == "object"
+                and isinstance(items.get("properties"), dict)
+            ):
+                lines.append(
+                    f"{indent}- {name} (array of objects){_schema_length_bounds(node)}{suffix}, "
+                    "each object with:"
+                )
+                _describe_schema_properties(items["properties"], lines, depth + 1)
+            elif isinstance(items, dict) and items.get("type"):
+                lines.append(
+                    f"{indent}- {name} (array of {items['type']})"
+                    f"{_schema_length_bounds(node)}{suffix}"
+                )
+            else:
+                lines.append(f"{indent}- {name} (array){_schema_length_bounds(node)}{suffix}")
+        else:
+            lines.append(
+                f"{indent}- {name} ({node_type}{_schema_length_bounds(node)})"
+                f"{_schema_enum_options(node)}{suffix}"
+            )
+
+
+def _describe_response_schema(response_schema: dict) -> str | None:
+    """Человекочитаемый список полей вместо сырого JSON-дампа.
+
+    Сырой дамп в промпте даёт модели готовый словарь для попугайства:
+    прод-кейс 2026-09-05 — таблица, чьи ячейки повторяли «minLength»,
+    «type object» и «additional_properties» из дампа схемы. Если описание
+    не собралось, вызывающий код откатывается к сырому дампу.
+    """
+    properties = response_schema.get("properties")
+    if not isinstance(properties, dict) or not properties:
+        return None
+    lines: list[str] = []
+    _describe_schema_properties(properties, lines, 0)
+    if not lines or len(lines) >= _MAX_SCHEMA_DESCRIPTION_LINES:
+        return None
+    return "\n".join(lines)
+
+
 def _get_schema_markdown(response_schema: dict | None) -> str:
     if not response_schema:
         return "- Follow the provided response schema strictly."
+    described = _describe_response_schema(response_schema)
+    if described:
+        return (
+            "- Follow this response schema. Fields (name, type, character limits, "
+            f"meaning):\n{described}"
+        )
     try:
         schema_text = json.dumps(response_schema, ensure_ascii=False)
     except Exception:
@@ -261,6 +372,9 @@ async def get_slide_content_from_type_and_outline(
             json_schema=response_schema,
             strict=False,
             validate_schema=True,
+            content_validator=lambda content: get_content_quality_errors(
+                response_schema, content
+            ),
             disconnect_checker=disconnect_checker,
         )
 

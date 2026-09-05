@@ -147,6 +147,13 @@ const TEMPLATE_V2_MATH_CSS = `
 export const TEMPLATE_V2_HTML_WIDTH = 1280;
 export const TEMPLATE_V2_HTML_HEIGHT = 720;
 
+// Пол размеров шрифта. Экспорт честно переносит px в pt (0.75pt/px для
+// канвы 1280px на слайде 13.33"), поэтому шрифт ниже 12px в PPTX даёт
+// нечитаемые 9pt — прод-кейс 2026-09-05 (дека «ИТ в России»): body 12–14px
+// и подписи графиков 8–9.9px. Страховочный пол применяется и к старым
+// шаблонам; авторинг новых дополнительно ограничен правилами промпта.
+export const TEMPLATE_V2_MIN_FONT_SIZE_PX = 12;
+
 export function templateV2UiToHtml(
   ui: unknown,
   options: TemplateV2HtmlOptions = {}
@@ -2165,9 +2172,12 @@ function chartConfig(item: JsonRecord, height: number): JsonRecord {
     textColor
   );
   const title = markdownToPlainChartText(readString(item.title) ?? "");
-  const fontSize = clamp(height * 0.033, 9, 18);
-  const titleFontSize = clamp(height * 0.044, 11, 26);
-  const valueFontSize = clamp(height * 0.029, 8, 15);
+  // Прежние коэффициенты (0.033/0.044/0.029 с полом 9/11/8) давали на
+  // эталонном графике 640x300 всего 9.9px подписей (7.4pt в PPTX). Пол 12px
+  // достигается от ~286px высоты, потолок 20px — от ~476px.
+  const fontSize = clamp(height * 0.042, TEMPLATE_V2_MIN_FONT_SIZE_PX, 20);
+  const titleFontSize = clamp(height * 0.05, 14, 26);
+  const valueFontSize = clamp(height * 0.036, 11, 16);
   const autoShowLegend =
     isPieLikeChart(chartKind) ||
     data.series.length > 1 ||
@@ -2642,7 +2652,7 @@ function chartScales({
           display: yAxis,
           font: {
             family: CHART_FONT_FAMILY,
-            size: Math.max(8, fontSize - 1),
+            size: Math.max(10, fontSize - 1),
           },
           presentonFormat: true,
         },
@@ -2696,7 +2706,7 @@ function chartScales({
       display: showLinearAxis,
       font: {
         family: CHART_FONT_FAMILY,
-        size: Math.max(8, fontSize - 2),
+        size: Math.max(10, fontSize - 2),
         weight: 600,
       },
       presentonFormat: true,
@@ -3368,7 +3378,9 @@ function fontStyle(
   const family = readString(font.family);
   const size = readNumber(font.size);
   if (family) style += `font-family:${escapeCssFont(family)};`;
-  if (size != null) style += `font-size:${cssNumber(size)}px;`;
+  if (size != null) {
+    style += `font-size:${cssNumber(Math.max(TEMPLATE_V2_MIN_FONT_SIZE_PX, size))}px;`;
+  }
   if (hasOwn(font, "italic")) {
     style += readBoolean(font.italic) ? "font-style:italic;" : "font-style:normal;";
   }
