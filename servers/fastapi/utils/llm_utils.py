@@ -296,6 +296,31 @@ def structured_validation_feedback_user_message(
     )
 
 
+#: upstream-провайдеры иногда отбивают генерацию нарушением response-схемы
+#: (например, «Upstream error from Sail Research: response_format violated:
+#: model output did not match response JSON Schema …»). Модель недетерминирована:
+#: повторная попытка того же запроса обычно проходит. Ретраим только этот класс.
+_UPSTREAM_SCHEMA_VIOLATION_MARKERS = (
+    "response_format violated",
+    "did not match response json schema",
+    "upstream error from",
+)
+_MAX_UPSTREAM_SCHEMA_RETRIES = 2
+_UPSTREAM_RETRY_DELAYS_SEC = (1.0, 2.0)
+
+
+def _is_upstream_schema_violation(error: BaseException) -> bool:
+    """Upstream-отбой по response-схеме — единственный класс, который ретраим."""
+    candidates = [str(error), getattr(error, "message", None)]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        lowered = candidate.lower()
+        if any(marker in lowered for marker in _UPSTREAM_SCHEMA_VIOLATION_MARKERS):
+            return True
+    return False
+
+
 async def generate_structured_with_schema_retries(
     client: Any,
     model: str,
@@ -315,27 +340,52 @@ async def generate_structured_with_schema_retries(
     """
     max_validation_loops = max(1, validate_schema_max_loop_count)
     working_messages: list[Message] = list(messages)
+    upstream_retries = 0
+    first_call = True
 
     for validation_attempt in range(max_validation_loops):
         content: dict | None = None
-        for attempt in range(3):
+        empty_attempts = 0
+        while content is None:
             await _raise_if_client_disconnected(disconnect_checker)
-            content = await _generate_structured_content(
-                client,
-                disconnect_checker=disconnect_checker,
-                text_chunk_callback=(
-                    text_chunk_callback if validation_attempt == 0 and attempt == 0 else None
-                ),
-                **get_generate_kwargs(
-                    model=model,
-                    messages=working_messages,
-                    response_format=response_format,
-                ),
-            )
+            try:
+                content = await _generate_structured_content(
+                    client,
+                    disconnect_checker=disconnect_checker,
+                    text_chunk_callback=(
+                        text_chunk_callback if validation_attempt == 0 and first_call else None
+                    ),
+                    **get_generate_kwargs(
+                        model=model,
+                        messages=working_messages,
+                        response_format=response_format,
+                    ),
+                )
+                first_call = False
+            except Exception as error:
+                if upstream_retries < _MAX_UPSTREAM_SCHEMA_RETRIES and (
+                    _is_upstream_schema_violation(error)
+                ):
+                    upstream_retries += 1
+                    delay = _UPSTREAM_RETRY_DELAYS_SEC[
+                        min(upstream_retries, len(_UPSTREAM_RETRY_DELAYS_SEC)) - 1
+                    ]
+                    LOGGER.warning(
+                        "Upstream schema violation, retry %d/%d in %.0fs: %s",
+                        upstream_retries,
+                        _MAX_UPSTREAM_SCHEMA_RETRIES,
+                        delay,
+                        error,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                raise
             if content is not None:
                 break
-            if attempt < 2:
-                await asyncio.sleep(0.5 * (attempt + 1))
+            empty_attempts += 1
+            if empty_attempts >= 3:
+                break
+            await asyncio.sleep(0.5 * empty_attempts)
 
         if content is None:
             raise HTTPException(

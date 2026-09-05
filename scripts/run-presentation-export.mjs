@@ -1,7 +1,31 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runTask } from "@presenton/export-core";
-import { addSvgRasterFallbacks, loadExportCoreDeps } from "./pptx-svg-fallback.mjs";
+
+/**
+ * Модуль пост-обработки грузится живучим импортом: раннер копируется
+ * sync-скриптом в presentation-export/runner.mjs, и относительный путь
+ * зависит от того, откуда файл запущен (образ кладёт pptx-svg-fallback.mjs
+ * рядом; локально он в scripts/). Если модуль не найден — пост-обработка
+ * SVG отключается с warning, экспорт продолжается как раньше: ошибка
+ * импорта не должна ронять сам экспорт (прод-инцидент ERR_MODULE_NOT_FOUND).
+ */
+async function loadSvgFallbackModule() {
+  const candidates = ["./pptx-svg-fallback.mjs", "../scripts/pptx-svg-fallback.mjs"];
+  let lastError;
+  for (const candidate of candidates) {
+    try {
+      return await import(candidate);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  console.warn(
+    "[presentation-export] pptx-svg-fallback.mjs не найден — SVG-пост-обработка отключена:",
+    lastError?.message,
+  );
+  return null;
+}
 
 /**
  * SVG-иконки export-core вшивает без растрового fallback (r:embed у blip
@@ -17,8 +41,10 @@ async function applySvgRasterFallback(normalizedResponse, task) {
   if (!pptxPath || !pptxPath.toLowerCase().endsWith(".pptx")) return;
 
   try {
-    const { JSZip, sharp } = await loadExportCoreDeps();
-    const result = await addSvgRasterFallbacks(pptxPath, {
+    const fallbackModule = await loadSvgFallbackModule();
+    if (!fallbackModule) return;
+    const { JSZip, sharp } = await fallbackModule.loadExportCoreDeps();
+    const result = await fallbackModule.addSvgRasterFallbacks(pptxPath, {
       JSZip,
       // density подгоняем под размер иконки: 72dpi × (512 / базовая ширина),
       // чтобы PNG не мылился при масштабировании в PowerPoint

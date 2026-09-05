@@ -57,8 +57,10 @@ RUN mkdir -p /app/document-extraction-liteparse \
 COPY resources/document-extraction/liteparse_runner.mjs /app/document-extraction-liteparse/liteparse_runner.mjs
 COPY scripts/sync-presentation-export.cjs /app/scripts/sync-presentation-export.cjs
 COPY scripts/run-presentation-export.mjs /app/scripts/run-presentation-export.mjs
+COPY scripts/pptx-svg-fallback.mjs /app/scripts/pptx-svg-fallback.mjs
 RUN rm -rf /app/presentation-export \
-    && node /app/scripts/sync-presentation-export.cjs --force
+    && node /app/scripts/sync-presentation-export.cjs --force \
+    && cp /app/scripts/pptx-svg-fallback.mjs /app/presentation-export/pptx-svg-fallback.mjs
 
 
 FROM python:3.11-slim-trixie AS runtime
